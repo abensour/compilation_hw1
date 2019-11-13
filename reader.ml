@@ -113,8 +113,80 @@ let nt = pack nt (function (e, _) -> e) in
 let make_spaced nt = make_paired nt_whitespaces nt_whitespaces nt;;
 let tok_digits = make_spaced digits ;; *)
 
-let read_sexpr string = raise X_not_yet_implemented ;;
+(*check capital letter*) 
+(*liad's work*)
+let boolP = 
+let tOrf = disj (word "#t") (word "#f") in 
+pack tOrf (fun (boolean)-> 
+match boolean with
+| [_;'t'] -> Bool(true)
+| _ -> Bool(false));;
 
+let make_range_char leq ch1 (s : char list) =
+  pack (const (fun ch -> (leq ch1 ch))) (fun (e)-> [e]) s;;
+
+let rangeChar = make_range_char (fun ch1 ch2 -> ch1 < ch2);;
+
+let visibleSimpleChar = rangeChar  ' ';;
+
+let newline = pack (word "newline") (fun l -> ['1';'0']);; 
+let nul = pack (word "nul") (fun l -> ['0']);; 
+let space = pack (word "space") (fun l -> ['3'; '2']);;
+let tab = pack (word "tab") (fun l -> ['9']);;
+let page = pack (word "page") (fun l -> ['1';'2']);;
+let return = pack (word "return") (fun l -> ['1'; '3']);;
+
+let namedChar s = 
+try disj newline nul s 
+with X_no_match -> try disj space tab s
+with X_no_match -> try disj page return s 
+with X_no_match -> raise X_no_match;;
+
+let charP  =  
+pack (caten (word "#\\") (disj namedChar visibleSimpleChar))
+(fun (l, e) -> match e with
+| ch::[] -> Char(ch)
+| es -> Char(char_of_int(int_of_string(list_to_string es))));;
+
+(* support in 34 is missing *)
+(*ascii code of special char*)
+let stringMetaChar = const (fun ch -> ch= char_of_int(13) || ch= char_of_int(10)
+|| ch= char_of_int(9)|| ch= char_of_int(12)|| ch= char_of_int(92)) ;;
+let stringLiteralChar = const (fun ch -> ch != '"' && ch != '\\' );;
+let stringChar = disj stringLiteralChar stringMetaChar ;;
+let doubleQuote = char '"';;
+
+let stringP  =  
+let pars = caten (caten doubleQuote (star stringChar)) doubleQuote in (* (((a,b),c),[])*)
+pack pars (fun ((l,s),r) -> String(list_to_string(s))) ;;
+
+let sexpr_parser s = 
+try boolP s
+with X_no_match -> try charP s
+with X_no_match -> stringP s;;
+
+(*quated*)
+let qoutedP = pack (caten (word "'") sexpr_parser) 
+(fun (q, s) -> Pair(Symbol(qoute_to_string(list_to_string(q))), Pair(s, Nil)));;
+
+let quasiP = pack (caten (word "`") sexpr_parser) 
+(fun (q, s) -> Pair(Symbol(qoute_to_string(q)), Pair(s, Nil)));;
+
+let unqouteSpliceP = pack (caten (word ",@") sexpr_parser) 
+(fun (q, s) -> Pair(Symbol(qoute_to_string(q)), Pair(s, Nil)));;
+
+let unqoutP = pack (caten (word ",") sexpr_parser) 
+(fun (q, s) -> Pair(Symbol(qoute_to_string(q)), Pair(s, Nil)));;
+
+(*let qoute_to_string q =
+ match q with
+|" -> "quote"
+|['`'] -> "quasiqoute"
+|[',';'@'] -> "unquote-splicing"
+|[','] -> "unquote";;
+*)
+let read_sexpr string = sexpr_parser (string_to_list(string));;
+  
 let read_sexprs string = raise X_not_yet_implemented;;
 
 
