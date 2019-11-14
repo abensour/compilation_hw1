@@ -160,32 +160,75 @@ let stringP  =
 let pars = caten (caten doubleQuote (star stringChar)) doubleQuote in (* (((a,b),c),[])*)
 pack pars (fun ((l,s),r) -> String(list_to_string(s))) ;;
 
-let sexpr_parser s = 
-try boolP s
-with X_no_match -> try charP s
-with X_no_match -> stringP s;;
+let unested_sexpr_parser s = 
+disj_list [boolP; charP; stringP] s ;; 
 
 (*quated*)
-let qoutedP = pack (caten (word "'") sexpr_parser) 
-(fun (q, s) -> Pair(Symbol(qoute_to_string(list_to_string(q))), Pair(s, Nil)));;
 
-let quasiP = pack (caten (word "`") sexpr_parser) 
-(fun (q, s) -> Pair(Symbol(qoute_to_string(q)), Pair(s, Nil)));;
 
-let unqouteSpliceP = pack (caten (word ",@") sexpr_parser) 
-(fun (q, s) -> Pair(Symbol(qoute_to_string(q)), Pair(s, Nil)));;
-
-let unqoutP = pack (caten (word ",") sexpr_parser) 
-(fun (q, s) -> Pair(Symbol(qoute_to_string(q)), Pair(s, Nil)));;
-
-(*let qoute_to_string q =
+let qoute_to_string q =
  match q with
-|" -> "quote"
+|['\''] -> "quote"
 |['`'] -> "quasiqoute"
 |[',';'@'] -> "unquote-splicing"
-|[','] -> "unquote";;
-*)
-let read_sexpr string = sexpr_parser (string_to_list(string));;
+|[',']-> "unquote"
+|_ -> "";;
+
+
+(*taken from practice lesson*)
+let make_paired nt_left nt_right nt =
+let nt = caten nt_left nt in
+let nt = pack nt (function (_, e) -> e) in
+let nt = caten nt nt_right in
+let nt = pack nt (function (e, _) -> e) in
+  nt;;
+
+
+let nt_whitespaces = star (char ' ');;
+
+let make_spaced nt = make_paired nt_whitespaces nt_whitespaces nt;;
+
+let tok_lparen = make_spaced ( char '(');;
+
+let tok_rparen = make_spaced ( char ')');;
+
+let tok_dot = make_spaced (char '.');;
+(**)
+(*returns (sexp, rest of list) *)
+let rec nested_sexpr_parser l=
+let qoutedP = pack (caten (word "'") nested_sexpr_parser) 
+(fun (q, s) -> Pair(Symbol(qoute_to_string q ), Pair(s, Nil))) in
+
+let quasiP = pack (caten (word "`") nested_sexpr_parser) 
+(fun (q, s) -> Pair(Symbol(qoute_to_string q), Pair(s, Nil))) in
+
+let unqouteSpliceP = pack (caten (word ",@") nested_sexpr_parser) 
+(fun (q, s) -> Pair(Symbol(qoute_to_string q), Pair(s, Nil))) in
+
+let unqoutP = pack (caten (word ",") nested_sexpr_parser) 
+(fun (q, s) -> Pair(Symbol(qoute_to_string q), Pair(s, Nil))) in
+
+let quate_parser = disj_list [qoutedP ; quasiP ; unqouteSpliceP; unqoutP] in
+
+(* ( (  ('(', [sexp1;sexp2;...])  , ')' ), rest list ) *)
+(*make it a nested pair *)
+(* check empty list*)
+let listP =   pack (caten (caten tok_lparen (star nested_sexpr_parser)) tok_rparen)
+(fun ((lpar, list_of_sexp), rpar) -> List.fold_right (fun curr acc -> Pair(curr, acc)) list_of_sexp Nil)
+in
+
+let dottedListP = 
+pack (caten (caten (caten (caten tok_lparen (plus nested_sexpr_parser)) tok_dot )nested_sexpr_parser )tok_rparen)
+(fun ((((lpar, list_of_sexp), dot), sp), rpar) -> List.fold_right (fun curr acc -> Pair(curr, acc)) list_of_sexp sp)
+in
+
+let list_of_parsers = [unested_sexpr_parser; quate_parser; listP; dottedListP] in
+disj_list list_of_parsers l ;;
+
+(*main method gets string returns sexp*)
+let read_sexpr string = 
+let list = string_to_list string in 
+nested_sexpr_parser list;;
   
 let read_sexprs string = raise X_not_yet_implemented;;
 
