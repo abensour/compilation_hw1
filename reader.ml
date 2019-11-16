@@ -59,7 +59,7 @@ match maybe plMin l with
 | (Some(result),e) ->
 let (intg,rest) = digits e in
 ((result :: intg) ,rest);;
-
+ 
 let integerP l= 
 let (number,sec) = integerstart l in (* get the number and the continuence *)
 match sec with
@@ -67,51 +67,37 @@ match sec with
 | ch :: es ->  (* there is some continuation can be symbol/float/exponent *)
 if ((lowercase_ascii ch) == 'e') then
   let (exponent,rest) = integerstart es in 
-  if (rest != []) then raise X_this_should_not_happen
+  if (rest != []) then raise X_no_match
   else 
-  let iNumber = int_of_string (list_to_string number) in
-  let iExpo = int_of_string (list_to_string exponent) in
-  let fullNum = iNumber * (pow 10 iExpo) in 
-  Number(Int fullNum) 
+  let fNumber = float_of_string (list_to_string number) in
+  let fExpo = float_of_string (list_to_string exponent) in
+  let fullNum = fNumber *. (10. ** fExpo) in 
+  if (float_of_int(int_of_float fullNum) = fullNum) then Number (Int (int_of_float fullNum))
+  else Number (Float  fullNum)
 else raise X_no_match ;;
 
 let floatP l= 
 let (number,sec) = integerstart l in (* get the number and the continuence *)
 match sec with
-| [] -> raise X_no_match
+| [] -> Number(Int(int_of_string (list_to_string number)))
 | chf :: esf ->  (* there is some continuation can be symbol/float *)
 if (chf == '.') then
   let (decimal,drest) = digits esf in 
-  let fullNum =(float_of_string (list_to_string (number @ ['.'] @ decimal))) in
+  let fNum =(float_of_string (list_to_string (number @ ['.'] @ decimal))) in
   match drest with
-  |[] ->  Number(Float(fullNum))
+  |[] ->  Number(Float(fNum))
   |ch :: es ->  (* there is some continuation can be symbol/float/exponent *)
   if ((lowercase_ascii ch) == 'e') then
     let (exponent,rest) = integerstart es in 
     if (rest != []) then raise X_no_match
     else 
-    let iExpo = int_of_string (list_to_string exponent) in
-    let fullNumExp = fullNum *. (float_of_int (pow 10 iExpo)) in 
-    Number(Float fullNum) 
+      let fExpo = float_of_string (list_to_string exponent) in
+      let fullNum = fNum *. (10. ** fExpo) in 
+      if (float_of_int(int_of_float fullNum) = fullNum) then Number (Int (int_of_float fullNum))
+      else Number (Float  fullNum)
   else raise X_no_match 
 else raise X_no_match ;;
 
-(* let charI = lowercase_ascii
-match (let nextchar = lowercase_ascii((function (e :: es) -> e) sec)) with
-| e -> (*exponent*) 
-| . -> (*float*)
-| _ -> (*check symbol / no match*) *)
-
-
- (* let nt_whitespaces = star (char ' ');;
-let make_paired nt_left nt_right nt =
-let nt = caten nt_left nt in
-let nt = pack nt (function (_, e) -> e) in
-let nt = caten nt nt_right in
-let nt = pack nt (function (e, _) -> e) in
-  nt;;
-let make_spaced nt = make_paired nt_whitespaces nt_whitespaces nt;;
-let tok_digits = make_spaced digits ;; *)
 
 (*check capital letter*) 
 (*liad's work*)
