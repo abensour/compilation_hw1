@@ -102,11 +102,23 @@ else raise X_no_match ;;
 (*check capital letter*) 
 (*liad's work*)
 let boolP = 
-let tOrf = disj (word "#t") (word "#f") in 
+let tOrf = disj (word_ci "#t") (word_ci "#f") in 
 pack tOrf (fun (boolean)-> 
 match boolean with
 | [_;'t'] -> Bool(true)
+| [_;'T'] -> Bool(true)
 | _ -> Bool(false));;
+
+let nilP s = match s with
+|[] -> (Nil, [])
+|_ -> raise X_no_match;;
+
+(*line comments*)
+let any_char_but_semi = const (fun ch -> ch != ';');; 
+let semiP = pack (char ';') (fun e-> [e]);; 
+let any_char_but_newline = const (fun ch -> ch != '\n');; 
+let end_of_line_or_input = disj (nt_end_of_input) (pack (char '\n') (fun e-> [e]));;
+let line_commentsP = pack (caten (caten semiP (star any_char_but_newline)) end_of_line_or_input) (fun e-> Nil) ;; 
 
 let make_range_char leq ch1 (s : char list) =
   pack (const (fun ch -> (leq ch1 ch))) (fun (e)-> [e]) s;;
@@ -115,12 +127,12 @@ let rangeChar = make_range_char (fun ch1 ch2 -> ch1 < ch2);;
 
 let visibleSimpleChar = rangeChar  ' ';;
 
-let newline = pack (word "newline") (fun l -> ['1';'0']);; 
-let nul = pack (word "nul") (fun l -> ['0']);; 
-let space = pack (word "space") (fun l -> ['3'; '2']);;
-let tab = pack (word "tab") (fun l -> ['9']);;
-let page = pack (word "page") (fun l -> ['1';'2']);;
-let return = pack (word "return") (fun l -> ['1'; '3']);;
+let newline = pack (word_ci "newline") (fun l -> ['1';'0']);; 
+let nul = pack (word_ci "nul") (fun l -> ['0']);; 
+let space = pack (word_ci "space") (fun l -> ['3'; '2']);;
+let tab = pack (word_ci "tab") (fun l -> ['9']);;
+let page = pack (word_ci "page") (fun l -> ['1';'2']);;
+let return = pack (word_ci "return") (fun l -> ['1'; '3']);;
 
 let namedChar s = 
 try disj newline nul s 
@@ -146,20 +158,14 @@ let stringP  =
 let pars = caten (caten doubleQuote (star stringChar)) doubleQuote in (* (((a,b),c),[])*)
 pack pars (fun ((l,s),r) -> String(list_to_string(s))) ;;
 
+(*check difference between number to symbol*)
+let punctuation = const (fun ch-> ch= '!' || ch= '$' || ch= '^' || ch='*' || ch='-' || ch='_' || ch='='
+|| ch='+' || ch='<' || ch='>' || ch='/' || ch ='?');;
+let symbolChar = disj_list [range_ci 'a' 'z'; digit ; punctuation];;
+let symbolP = pack (plus symbolChar) (fun e -> Symbol(list_to_string e));;
+
 let unested_sexpr_parser s = 
-disj_list [boolP; charP; stringP] s ;; 
-
-(*quated*)
-
-
-let qoute_to_string q =
- match q with
-|['\''] -> "quote"
-|['`'] -> "quasiqoute"
-|[',';'@'] -> "unquote-splicing"
-|[',']-> "unquote"
-|_ -> "";;
-
+disj_list [line_commentsP ;nilP ;boolP; charP; stringP; symbolP] s ;; 
 
 (*taken from practice lesson*)
 let make_paired nt_left nt_right nt =
@@ -183,16 +189,16 @@ let tok_dot = make_spaced (char '.');;
 (*returns (sexp, rest of list) *)
 let rec nested_sexpr_parser l=
 let qoutedP = pack (caten (word "'") nested_sexpr_parser) 
-(fun (q, s) -> Pair(Symbol(qoute_to_string q ), Pair(s, Nil))) in
+(fun (q, s) -> Pair(Symbol "quote", Pair(s, Nil))) in
 
 let quasiP = pack (caten (word "`") nested_sexpr_parser) 
-(fun (q, s) -> Pair(Symbol(qoute_to_string q), Pair(s, Nil))) in
+(fun (q, s) -> Pair(Symbol "quasiqoute", Pair(s, Nil))) in
 
 let unqouteSpliceP = pack (caten (word ",@") nested_sexpr_parser) 
-(fun (q, s) -> Pair(Symbol(qoute_to_string q), Pair(s, Nil))) in
+(fun (q, s) -> Pair(Symbol "unquote-splicing", Pair(s, Nil))) in
 
 let unqoutP = pack (caten (word ",") nested_sexpr_parser) 
-(fun (q, s) -> Pair(Symbol(qoute_to_string q), Pair(s, Nil))) in
+(fun (q, s) -> Pair(Symbol "unquote", Pair(s, Nil))) in
 
 let quate_parser = disj_list [qoutedP ; quasiP ; unqouteSpliceP; unqoutP] in
 
@@ -200,24 +206,46 @@ let quate_parser = disj_list [qoutedP ; quasiP ; unqouteSpliceP; unqoutP] in
 (*make it a nested pair *)
 (* check empty list*)
 let listP =   pack (caten (caten tok_lparen (star nested_sexpr_parser)) tok_rparen)
-(fun ((lpar, list_of_sexp), rpar) -> List.fold_right (fun curr acc -> Pair(curr, acc)) list_of_sexp Nil)
+(fun ((lpar, list_of_sexp), rpar) -> List.fold_right 
+(fun curr acc -> 
+match curr with 
+|Nil -> acc
+|_ -> Pair(curr, acc)) list_of_sexp Nil)
 in
 
 let dottedListP = 
-pack (caten (caten (caten (caten tok_lparen (plus nested_sexpr_parser)) tok_dot )nested_sexpr_parser )tok_rparen)
-(fun ((((lpar, list_of_sexp), dot), sp), rpar) -> List.fold_right (fun curr acc -> Pair(curr, acc)) list_of_sexp sp)
+pack (caten (caten (caten (caten tok_lparen (plus nested_sexpr_parser)) tok_dot) nested_sexpr_parser )tok_rparen)
+(fun ((((lpar, list_of_sexp), dot), sp), rpar) -> List.fold_right 
+(fun curr acc -> 
+match curr with 
+|Nil -> acc
+|_ -> Pair(curr, acc)) list_of_sexp sp)
 in
 
-let list_of_parsers = [unested_sexpr_parser; quate_parser; listP; dottedListP] in
+let sexpr_commentP l = 
+let (_, rest) =  caten (caten (word "#;") nt_whitespaces) nested_sexpr_parser l
+in (Nil, rest)
+in 
+
+let list_of_parsers = [unested_sexpr_parser; quate_parser; listP; dottedListP; sexpr_commentP] in
 disj_list list_of_parsers l ;;
 
 
 (*main method gets string returns sexp*)
 let read_sexpr string = 
 let list = string_to_list string in 
-nested_sexpr_parser list;;
-  
-let read_sexprs string = raise X_not_yet_implemented;;
+(*remove whitespaces*)
+let (sexpr, rest) = pack (caten (caten nt_whitespaces nested_sexpr_parser) nt_whitespaces) 
+(fun ((l, sexpr),r) -> sexpr) list in
+sexpr;; 
+
+(*match (sexpr,rest) with 
+|(Nil, []) -> Nil
+|(Nil, rest) -> nested_sexpr_parser rest 
+|-> sexpr ;; 
+*)
+let read_sexprs string = X_not_yet_implemented;;
+
 
 
   
