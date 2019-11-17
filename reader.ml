@@ -207,10 +207,10 @@ let punctuation = const (fun ch-> ch= '!' || ch= '$' || ch= '^' || ch='*' || ch=
 let symbolChar = disj_list [range_ci 'a' 'z'; digit ; punctuation];;
 let symbolP = pack (plus symbolChar) (fun e -> 
 let lowercase = List.map lowercase_ascii e in
- Symbol(list_to_string lowercase));;
+Symbol(list_to_string lowercase));;
 
 let unested_sexpr_parser s = 
-disj_list [nilP ;boolP; charP; stringP; symbolP] s ;; 
+disj_list [boolP; charP; stringP; symbolP] s ;; 
 
 (*taken from practice lesson*)
 let make_paired nt_left nt_right nt =
@@ -230,6 +230,7 @@ let tok_rparen = make_spaced ( char ')');;
 
 let tok_dot = make_spaced (char '.');;
 (**)
+
 (*returns (sexp, rest of list) *)
 let rec nested_sexpr_parser l=
 let qoutedP = pack (caten (word "'") nested_sexpr_parser) 
@@ -269,19 +270,14 @@ make_line_comments (disj_list list_of_parsers) l;;
 
 (*main method gets string returns sexp*)
 let read_sexpr string = 
-let list = string_to_list string in 
-(*remove whitespaces*)
-let (sexpr, rest) = pack (caten (caten nt_whitespaces nested_sexpr_parser) nt_whitespaces) 
-(fun ((l, sexpr),r) -> sexpr) list in
-sexpr;; 
-
-(*match (sexpr,rest) with 
-|(Nil, []) -> Nil
-|(Nil, rest) -> nested_sexpr_parser rest 
-|-> sexpr ;; 
-*)
-let read_sexprs string = X_not_yet_implemented;; 
+let list_of_char = string_to_list string in 
+nested_sexpr_parser list_of_char;;
 
 
-  
+let read_sexprs string = 
+let list_of_char = string_to_list string in 
+let (sexpr_list, rest) = (star nested_sexpr_parser)  list_of_char
+in sexpr_list;; 
+
+ 
 end;; (* struct Reader *)
