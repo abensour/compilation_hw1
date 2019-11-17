@@ -3,7 +3,7 @@
 
 exception X_not_yet_implemented;;
 exception X_this_should_not_happen;;
-  
+exception X_is_empty;;
 type number =
   | Int of int
   | Float of float;;
@@ -148,7 +148,7 @@ match boolean with
 | _ -> Bool(false));;
 
 let nilP s = match s with
-|[] -> (Nil, [])
+|[] -> Nil
 |_ -> raise X_no_match;;
 
 (*line comments*)
@@ -156,10 +156,8 @@ let any_char_but_semi = const (fun ch -> ch != ';');;
 let semiP = pack (char ';') (fun e-> [e]);; 
 let any_char_but_newline = const (fun ch -> ch != '\n');; 
 let end_of_line_or_input = disj (nt_end_of_input) (pack (char '\n') (fun e-> [e]));;
-let line_commentsP = caten (caten semiP (star any_char_but_newline)) end_of_line_or_input ;; 
-
-(*seperate comments from the sexpr like make_spaces*)
-let make_line_comments nt = make_paired (star line_commentsP) (star line_commentsP) nt;;
+let line_commentsP = pack (caten (caten semiP (star any_char_but_newline)) end_of_line_or_input)
+(fun ((semi, chars),end_of)-> [' ']) ;; 
 
 let make_range_char leq ch1 (s : char list) =
   pack (const (fun ch -> (leq ch1 ch))) (fun (e)-> [e]) s;;
@@ -224,12 +222,16 @@ let nt_whitespaces = star (char ' ');;
 
 let make_spaced nt = make_paired nt_whitespaces nt_whitespaces nt;;
 
-let tok_lparen = make_spaced ( char '(');;
-
-let tok_rparen = make_spaced ( char ')');;
-
 let tok_dot = make_spaced (char '.');;
 (**)
+(*seperate comments from the sexpr like make_spaces*)
+let make_line_comments nt = make_paired (star line_commentsP) (star line_commentsP) nt;;
+
+let whitespaces_or_comment = disj make_spaced make_line_comments;;
+
+let tok_lparen = whitespaces_or_comment (char '(');;
+
+let tok_rparen = whitespaces_or_comment ( char ')');;
 
 (*returns (sexp, rest of list) *)
 let rec nested_sexpr_parser l=
@@ -251,28 +253,24 @@ let quate_parser = disj_list [qoutedP ; quasiP ; unqouteSpliceP; unqoutP] in
 (*make it a nested pair *)
 (* check empty list*)
 let listP =   pack (caten (caten tok_lparen (star nested_sexpr_parser)) tok_rparen)
-(fun ((lpar, list_of_sexp), rpar) -> List.fold_right 
-(fun curr acc ->  Pair(curr, acc)) list_of_sexp Nil) in
+(fun ((lpar, list_of_sexp), rpar) -> List.fold_right (fun curr acc ->  Pair(curr, acc)) list_of_sexp Nil) in
 
 let dottedListP = 
 pack (caten (caten (caten (caten tok_lparen (plus nested_sexpr_parser)) tok_dot) nested_sexpr_parser )tok_rparen)
 (fun ((((lpar, list_of_sexp), dot), sp), rpar) -> List.fold_right 
 (fun curr acc ->  Pair(curr, acc)) list_of_sexp sp) in
 
-let sexpr_commentP =  pack (caten (caten (word "#;") nt_whitespaces) nested_sexpr_parser) 
-(fun e-> Nil) in 
+let sexpr_commentP l =  let (((com1, com2) , sexpr_com), rest) =  caten (caten (word "#;") nt_whitespaces) nested_sexpr_parser l
+in nested_sexpr_parser rest in
 let list_of_parsers = [unested_sexpr_parser; quate_parser; listP; dottedListP; sexpr_commentP] in
 
-
-let () = printf "%s" (list_to_string l) in 
-make_line_comments (disj_list list_of_parsers) l;;
-
+disj_list list_of_parsers l;;
 
 (*main method gets string returns sexp*)
 let read_sexpr string = 
 let list_of_char = string_to_list string in 
-nested_sexpr_parser list_of_char;;
-
+let (sexpr, rest) = nested_sexpr_parser list_of_char
+in sexpr;;
 
 let read_sexprs string = 
 let list_of_char = string_to_list string in 
