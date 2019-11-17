@@ -45,12 +45,50 @@ let normalize_scheme_symbol str =
 	s) then str
   else Printf.sprintf "|%s|" str;;
 
+
 (* lishay work *)
-let car = (function (e, _) -> e);;
-let cdr = (function (_,e) -> e);;
 let digit = range '0' '9';;
 let digits = plus digit;;
 let plMin = disj (char '+') (char '-');;
+let abc = (range 'a' 'z') ;;
+
+
+
+ (*radix notation parser *)
+let rorR = disj (char 'r') (char 'R') ;;
+let radixStart =  caten (caten (char '#') digits) rorR ;; (* ((('#', ['2'; '4']), 'r'), ['e'; 'f']) *)
+let getNumF base counterP char = 
+let (integer,mult) = counterP in 
+let charFloat =if (char >= 'a' && char <= 'z') then float_of_int((int_of_char char) - 87) else float_of_int((int_of_char char) - 48)
+in if (charFloat >= (float_of_int base)) then raise X_no_match else
+((integer +. (charFloat *. mult)), (mult /. (float_of_int base)));;
+let getNumI base char counterP= 
+let (integer,mult) = counterP in 
+let charFloat =if (char >= 'a' && char <= 'z') then float_of_int((int_of_char char) - 87) else float_of_int((int_of_char char) - 48)
+in if (charFloat >= (float_of_int base)) then raise X_no_match else ((integer +. (charFloat *. mult)), (mult*. (float_of_int base)));;
+let digOLetter = plus (disj digit abc) ;;
+
+
+let radixP l = let (((e,base),r),bNumber) = radixStart l in 
+let number = List.map lowercase_ascii bNumber in
+let ibase = int_of_string (list_to_string base) in 
+if ibase > 36 then raise X_no_match
+else 
+let (sign,num) = 
+match maybe plMin number with
+| (None,e) -> ('+',e)
+| (Some(result),e) -> (result,e) in
+let (intB,floatb) = digOLetter num in (*([1;2;a;z;D;1],[.;d;S]*) 
+let (fnum,length) = List.fold_right (getNumI ibase) intB (0.,1.) in (*fnum is the number ao the integer part*)
+match floatb with
+| [] -> if sign == '+' then Number(Int (int_of_float fnum)) else Number(Int (-1 * (int_of_float fnum)))
+| chf :: esf ->  (* esf is the continue without the dot *)
+if (chf != '.') then raise X_no_match 
+else  let (numFloat,rest) = digOLetter esf
+in match rest with
+|[] -> let (fnumc,lengthc) = List.fold_left (getNumF ibase) (0., 1. /. (float_of_int ibase)) numFloat in (*fnum is the number ao the integer part*)
+if sign == '+' then Number(Float(fnum +. fnumc)) else Number(Float(-1. *. (fnum +. fnumc)))
+| _ -> raise X_no_match ;;  
 
 (* ['+';'3';'5';'f'] -> (['+'; '3'; '5'], ['f']) *)
 let integerstart l= 
@@ -59,6 +97,7 @@ match maybe plMin l with
 | (Some(result),e) ->
 let (intg,rest) = digits e in
 ((result :: intg) ,rest);;
+
  
 let integerP l= 
 let (number,sec) = integerstart l in (* get the number and the continuence *)
@@ -98,7 +137,6 @@ if (chf == '.') then
   else raise X_no_match 
 else raise X_no_match ;;
 
-
 (*check capital letter*) 
 (*liad's work*)
 let boolP = 
@@ -118,7 +156,10 @@ let any_char_but_semi = const (fun ch -> ch != ';');;
 let semiP = pack (char ';') (fun e-> [e]);; 
 let any_char_but_newline = const (fun ch -> ch != '\n');; 
 let end_of_line_or_input = disj (nt_end_of_input) (pack (char '\n') (fun e-> [e]));;
-let line_commentsP = pack (caten (caten semiP (star any_char_but_newline)) end_of_line_or_input) (fun e-> Nil) ;; 
+let line_commentsP = caten (caten semiP (star any_char_but_newline)) end_of_line_or_input ;; 
+
+(*seperate comments from the sexpr like make_spaces*)
+let make_line_comments nt = make_paired (star line_commentsP) (star line_commentsP) nt;;
 
 let make_range_char leq ch1 (s : char list) =
   pack (const (fun ch -> (leq ch1 ch))) (fun (e)-> [e]) s;;
@@ -148,8 +189,10 @@ pack (caten (word "#\\") (disj namedChar visibleSimpleChar))
 
 (* support in 34 is missing *)
 (*ascii code of special char*)
-let stringMetaChar = const (fun ch -> ch= char_of_int(13) || ch= char_of_int(10)
+let doubleQuoteInS = pack (word "\\\"") (fun e -> '\"');;
+let otherMetaChar = const (fun ch -> ch= char_of_int(13) || ch= char_of_int(10) 
 || ch= char_of_int(9)|| ch= char_of_int(12)|| ch= char_of_int(92)) ;;
+let stringMetaChar = disj doubleQuoteInS otherMetaChar;;
 let stringLiteralChar = const (fun ch -> ch != '"' && ch != '\\' );;
 let stringChar = disj stringLiteralChar stringMetaChar ;;
 let doubleQuote = char '"';;
@@ -162,10 +205,12 @@ pack pars (fun ((l,s),r) -> String(list_to_string(s))) ;;
 let punctuation = const (fun ch-> ch= '!' || ch= '$' || ch= '^' || ch='*' || ch='-' || ch='_' || ch='='
 || ch='+' || ch='<' || ch='>' || ch='/' || ch ='?');;
 let symbolChar = disj_list [range_ci 'a' 'z'; digit ; punctuation];;
-let symbolP = pack (plus symbolChar) (fun e -> Symbol(list_to_string e));;
+let symbolP = pack (plus symbolChar) (fun e -> 
+let lowercase = List.map lowercase_ascii e in
+ Symbol(list_to_string lowercase));;
 
 let unested_sexpr_parser s = 
-disj_list [line_commentsP ;nilP ;boolP; charP; stringP; symbolP] s ;; 
+disj_list [nilP ;boolP; charP; stringP; symbolP] s ;; 
 
 (*taken from practice lesson*)
 let make_paired nt_left nt_right nt =
@@ -174,7 +219,6 @@ let nt = pack nt (function (_, e) -> e) in
 let nt = caten nt nt_right in
 let nt = pack nt (function (e, _) -> e) in
   nt;;
-
 
 let nt_whitespaces = star (char ' ');;
 
@@ -207,28 +251,20 @@ let quate_parser = disj_list [qoutedP ; quasiP ; unqouteSpliceP; unqoutP] in
 (* check empty list*)
 let listP =   pack (caten (caten tok_lparen (star nested_sexpr_parser)) tok_rparen)
 (fun ((lpar, list_of_sexp), rpar) -> List.fold_right 
-(fun curr acc -> 
-match curr with 
-|Nil -> acc
-|_ -> Pair(curr, acc)) list_of_sexp Nil)
-in
+(fun curr acc ->  Pair(curr, acc)) list_of_sexp Nil) in
 
 let dottedListP = 
 pack (caten (caten (caten (caten tok_lparen (plus nested_sexpr_parser)) tok_dot) nested_sexpr_parser )tok_rparen)
 (fun ((((lpar, list_of_sexp), dot), sp), rpar) -> List.fold_right 
-(fun curr acc -> 
-match curr with 
-|Nil -> acc
-|_ -> Pair(curr, acc)) list_of_sexp sp)
-in
+(fun curr acc ->  Pair(curr, acc)) list_of_sexp sp) in
 
-let sexpr_commentP l = 
-let (_, rest) =  caten (caten (word "#;") nt_whitespaces) nested_sexpr_parser l
-in (Nil, rest)
-in 
-
+let sexpr_commentP =  pack (caten (caten (word "#;") nt_whitespaces) nested_sexpr_parser) 
+(fun e-> Nil) in 
 let list_of_parsers = [unested_sexpr_parser; quate_parser; listP; dottedListP; sexpr_commentP] in
-disj_list list_of_parsers l ;;
+
+
+let () = printf "%s" (list_to_string l) in 
+make_line_comments (disj_list list_of_parsers) l;;
 
 
 (*main method gets string returns sexp*)
