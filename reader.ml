@@ -47,6 +47,8 @@ let normalize_scheme_symbol str =
 
 
 (* lishay work *)
+
+(* lishay work *)
 let digit = range '0' '9';;
 let digits = plus digit;;
 let plMin = disj (char '+') (char '-');;
@@ -70,7 +72,7 @@ let digOLetter = plus (disj digit abc) ;;
 
 
 let radixP l = let (((e,base),r),bNumber) = radixStart l in 
-let number = List.map lowercase_ascii bNumber in
+let number = List.map lowercase_ascii bNumber in  
 let ibase = int_of_string (list_to_string base) in 
 if ibase > 36 then raise X_no_match
 else 
@@ -81,14 +83,12 @@ match maybe plMin number with
 let (intB,floatb) = digOLetter num in (*([1;2;a;z;D;1],[.;d;S]*) 
 let (fnum,length) = List.fold_right (getNumI ibase) intB (0.,1.) in (*fnum is the number ao the integer part*)
 match floatb with
-| [] -> if sign == '+' then Number(Int (int_of_float fnum)) else Number(Int (-1 * (int_of_float fnum)))
+| [] -> if sign == '+' then (Number(Int (int_of_float fnum)),floatb) else (Number(Int (-1 * (int_of_float fnum))),floatb)
 | chf :: esf ->  (* esf is the continue without the dot *)
-if (chf != '.') then raise X_no_match 
+if (chf != '.') then if sign == '+' then (Number(Int (int_of_float fnum)),floatb) else (Number(Int (-1 * (int_of_float fnum))),floatb) 
 else  let (numFloat,rest) = digOLetter esf
-in match rest with
-|[] -> let (fnumc,lengthc) = List.fold_left (getNumF ibase) (0., 1. /. (float_of_int ibase)) numFloat in (*fnum is the number ao the integer part*)
-if sign == '+' then Number(Float(fnum +. fnumc)) else Number(Float(-1. *. (fnum +. fnumc)))
-| _ -> raise X_no_match ;;  
+in let (fnumc,lengthc) = List.fold_left (getNumF ibase) (0., 1. /. (float_of_int ibase)) numFloat in (*fnum is the number ao the integer part*)
+if sign == '+' then (Number(Float(fnum +. fnumc)),rest) else (Number(Float(-1. *. (fnum +. fnumc))),rest) 
 
 (* ['+';'3';'5';'f'] -> (['+'; '3'; '5'], ['f']) *)
 let integerstart l= 
@@ -102,42 +102,36 @@ let (intg,rest) = digits e in
 let integerP l= 
 let (number,sec) = integerstart l in (* get the number and the continuence *)
 match sec with
-| [] -> Number(Int(int_of_string (list_to_string number)))  (*if no continuence than build the number*)
+| [] -> (Number(Int(int_of_string (list_to_string number))) ,[])  (*if no continuence than build the number*)
 | ch :: es ->  (* there is some continuation can be symbol/float/exponent *)
 if ((lowercase_ascii ch) == 'e') then
-  let (exponent,rest) = integerstart es in 
-  if (rest != []) then raise X_no_match
-  else 
+  let (exponent,rest) = integerstart es in  
   let fNumber = float_of_string (list_to_string number) in
   let fExpo = float_of_string (list_to_string exponent) in
   let fullNum = fNumber *. (10. ** fExpo) in 
-  if (float_of_int(int_of_float fullNum) = fullNum) then Number (Int (int_of_float fullNum))
-  else Number (Float  fullNum)
-else raise X_no_match ;;
+  if (float_of_int(int_of_float fullNum) = fullNum) then (Number (Int (int_of_float fullNum)),rest)
+  else (Number (Float  fullNum),rest)
+else if ((lowercase_ascii ch) == '.') then raise X_no_match else (Number(Int(int_of_string (list_to_string number))) ,sec);;
 
 let floatP l= 
 let (number,sec) = integerstart l in (* get the number and the continuence *)
 match sec with
-| [] -> Number(Int(int_of_string (list_to_string number)))
+| [] -> (Number(Int(int_of_string (list_to_string number))),[])
 | chf :: esf ->  (* there is some continuation can be symbol/float *)
 if (chf == '.') then
   let (decimal,drest) = digits esf in 
   let fNum =(float_of_string (list_to_string (number @ ['.'] @ decimal))) in
   match drest with
-  |[] ->  Number(Float(fNum))
+  |[] ->  (Number(Float(fNum)),drest)
   |ch :: es ->  (* there is some continuation can be symbol/float/exponent *)
   if ((lowercase_ascii ch) == 'e') then
     let (exponent,rest) = integerstart es in 
-    if (rest != []) then raise X_no_match
-    else 
-      let fExpo = float_of_string (list_to_string exponent) in
-      let fullNum = fNum *. (10. ** fExpo) in 
-      if (float_of_int(int_of_float fullNum) = fullNum) then Number (Int (int_of_float fullNum))
-      else Number (Float  fullNum)
-  else raise X_no_match 
+    let fExpo = float_of_string (list_to_string exponent) in
+    let fullNum = fNum *. (10. ** fExpo) in 
+    if (float_of_int(int_of_float fullNum) = fullNum) then (Number (Int (int_of_float fullNum)),rest)
+    else (Number (Float  fullNum),rest)
+  else (Number(Float(fNum)),drest)
 else raise X_no_match ;;
-
-(*check capital letter*) 
 (*liad's work*)
 let boolP = 
 let tOrf = disj (word_ci "#t") (word_ci "#f") in 
