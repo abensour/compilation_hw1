@@ -44,10 +44,6 @@ let normalize_scheme_symbol str =
 	s) then str
   else Printf.sprintf "|%s|" str;;
 
-
-
-
-
 (* lishay work *)
 let digit = range '0' '9';;
 let digits = plus digit;;
@@ -142,7 +138,10 @@ if (chf == '.') then
   else (Number(Float(fNum)),drest)
 else raise X_no_match ;;
 let floatP = not_followed_by floatPs symbolChar;;
+
 (*liad's work*)
+
+(*Boolean*)
 let boolP = 
 let tOrf = disj (word_ci "#t") (word_ci "#f") in 
 pack tOrf (fun (boolean)-> 
@@ -197,7 +196,7 @@ pack pars (fun ((l,s),r) -> String(list_to_string(s))) ;;
 
 
 let unested_sexpr_parser s = 
-disj_list [integerP ;boolP; charP; stringP; symbolP] s ;; 
+disj_list [boolP; charP;  integerP; floatP ; radixP ; stringP; symbolP] s ;; 
 
 (*taken from practice lesson*)
 let make_paired nt_left nt_right nt =
@@ -289,7 +288,7 @@ let sexpr_commentP l =  let (((com1, com2) , sexpr_com), rest) =  caten (caten (
 in nested_sexpr_parser rest in
 let list_of_parsers = [unested_sexpr_parser; quate_parser; listP; dottedListP; sexpr_commentP ;taggedSexprP] in
 
-disj_list list_of_parsers l;;
+ make_line_comments_or_whitespaces (disj_list list_of_parsers) l ;;
 
 (*main method gets string returns sexp*)
 let read_sexpr string = 
@@ -299,8 +298,10 @@ in sexpr;;
 
 let read_sexprs string = 
 let list_of_char = string_to_list string in 
-let (sexpr_list, rest) = (star nested_sexpr_parser)  list_of_char
-in sexpr_list;; 
+let (sexpr_list, rest) = (star nested_sexpr_parser) list_of_char in 
+match rest with 
+|[] -> sexpr_list
+|_ -> raise X_this_should_not_happen;;
 
  
 end;; (* struct Reader *)
