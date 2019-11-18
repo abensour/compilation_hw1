@@ -223,12 +223,18 @@ let make_line_comments nt = make_paired (star line_commentsP) (star line_comment
 
 let whitespaces_or_comment = disj make_spaced make_line_comments;;
 
-let tok_lparen = whitespaces_or_comment (char '(');;
+let tok_lparen = make_spaced (char '(');;
 
-let tok_rparen = whitespaces_or_comment ( char ')');;
+let tok_rparen = make_spaced ( char ')');;
 
+let tagP = pack (caten (caten (word "#{") symbolP) (word "}")) (fun ((a,sexp),b) -> 
+match sexp with
+|Symbol(str) ->TagRef(str)
+|_ -> raise X_no_match);;
+type mList = { mutable listtags : string list };;
+let tagsList = { listtags = []};;
 (*returns (sexp, rest of list) *)
-let rec nested_sexpr_parser l=
+let rec nested_sexpr_parser l =
 let qoutedP = pack (caten (word "'") nested_sexpr_parser) 
 (fun (q, s) -> Pair(Symbol "quote", Pair(s, Nil))) in
 
@@ -254,9 +260,20 @@ pack (caten (caten (caten (caten tok_lparen (plus nested_sexpr_parser)) tok_dot)
 (fun ((((lpar, list_of_sexp), dot), sp), rpar) -> List.fold_right 
 (fun curr acc ->  Pair(curr, acc)) list_of_sexp sp) in
 
+let exprTag =  caten (caten (word "(=") nested_sexpr_parser) tok_rparen in
+
+
+let  taggedSexprP = pack (caten tagP (maybe exprTag)) (fun (tag, maybeR) ->
+match tag, maybeR with 
+| TagRef(tag_str), None ->  if ormap (function tagname -> tagname = tag_str) tagsList.listtags then tag
+  else raise X_this_should_not_happen 
+| TagRef(tag_str),Some(((a, sexp), b)) -> if ormap (function tagname -> tagname = tag_str) tagsList.listtags then raise X_this_should_not_happen
+  else let () = tagsList.listtags <-  tag_str ::tagsList.listtags in  TaggedSexpr(tag_str, sexp)
+| _, _ -> raise X_no_match) in
+   
 let sexpr_commentP l =  let (((com1, com2) , sexpr_com), rest) =  caten (caten (word "#;") nt_whitespaces) nested_sexpr_parser l
 in nested_sexpr_parser rest in
-let list_of_parsers = [unested_sexpr_parser; quate_parser; listP; dottedListP; sexpr_commentP] in
+let list_of_parsers = [unested_sexpr_parser; quate_parser; listP; dottedListP; sexpr_commentP;taggedSexprP] in
 
 disj_list list_of_parsers l;;
 
