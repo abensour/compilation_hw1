@@ -46,7 +46,8 @@ let normalize_scheme_symbol str =
   else Printf.sprintf "|%s|" str;;
 
 
-(* lishay work *)
+
+
 
 (* lishay work *)
 let digit = range '0' '9';;
@@ -54,8 +55,16 @@ let digits = plus digit;;
 let plMin = disj (char '+') (char '-');;
 let abc = (range 'a' 'z') ;;
 
+(*liad's work *)
+let punctuation = const (fun ch-> ch= '!' || ch= '$' || ch= '^' || ch='*' || ch='-' || ch='_' || ch='='
+|| ch='+' || ch='<' || ch='>' || ch='/' || ch ='?');;
+let symbolChar = disj_list [range_ci 'a' 'z'; digit ; punctuation];;
+let symbolP = pack (plus symbolChar) (fun e -> 
+let lowercase = List.map lowercase_ascii e in
+Symbol(list_to_string lowercase));;
+(*end liad's work*)
 
-
+(* lishay work *)
  (*radix notation parser *)
 let rorR = disj (char 'r') (char 'R') ;;
 let radixStart =  caten (caten (char '#') digits) rorR ;; (* ((('#', ['2'; '4']), 'r'), ['e'; 'f']) *)
@@ -112,7 +121,7 @@ if ((lowercase_ascii ch) == 'e') then
   if (float_of_int(int_of_float fullNum) = fullNum) then (Number (Int (int_of_float fullNum)),rest)
   else (Number (Float  fullNum),rest)
 else if ((lowercase_ascii ch) == '.') then raise X_no_match else (Number(Int(int_of_string (list_to_string number))) ,sec);;
-let integerP = not_followed_by integerP symbolChar;;
+let integerP = not_followed_by integerPs symbolChar;;
 
 let floatPs l= 
 let (number,sec) = integerstart l in (* get the number and the continuence *)
@@ -195,16 +204,9 @@ let stringP  =
 let pars = caten (caten doubleQuote (star stringChar)) doubleQuote in (* (((a,b),c),[])*)
 pack pars (fun ((l,s),r) -> String(list_to_string(s))) ;;
 
-(*check difference between number to symbol*)
-let punctuation = const (fun ch-> ch= '!' || ch= '$' || ch= '^' || ch='*' || ch='-' || ch='_' || ch='='
-|| ch='+' || ch='<' || ch='>' || ch='/' || ch ='?');;
-let symbolChar = disj_list [range_ci 'a' 'z'; digit ; punctuation];;
-let symbolP = pack (plus symbolChar) (fun e -> 
-let lowercase = List.map lowercase_ascii e in
-Symbol(list_to_string lowercase));;
 
 let unested_sexpr_parser s = 
-disj_list [boolP; charP; stringP; symbolP] s ;; 
+disj_list [integerP ;boolP; charP; stringP; symbolP] s ;; 
 
 (*taken from practice lesson*)
 let make_paired nt_left nt_right nt =
@@ -262,14 +264,14 @@ pack (caten (caten (caten (caten tok_lparen (plus nested_sexpr_parser)) tok_dot)
 (fun ((((lpar, list_of_sexp), dot), sp), rpar) -> List.fold_right 
 (fun curr acc ->  Pair(curr, acc)) list_of_sexp sp) in
 
-let exprTag =  caten (caten (word "(=") nested_sexpr_parser) tok_rparen in
+let exprTag =  caten (word "=") nested_sexpr_parser in
 
 
 let  taggedSexprP = pack (caten tagP (maybe exprTag)) (fun (tag, maybeR) ->
 match tag, maybeR with 
 | TagRef(tag_str), None ->  if ormap (function tagname -> tagname = tag_str) tagsList.listtags then tag
-  else raise X_this_should_not_happen 
-| TagRef(tag_str),Some(((a, sexp), b)) -> if ormap (function tagname -> tagname = tag_str) tagsList.listtags then raise X_this_should_not_happen
+  else raise X_this_should_not_happen
+| TagRef(tag_str),Some((a, sexp)) -> if ormap (function tagname -> tagname = tag_str) tagsList.listtags then raise X_this_should_not_happen
   else let () = tagsList.listtags <-  tag_str ::tagsList.listtags in  TaggedSexpr(tag_str, sexp)
 | _, _ -> raise X_no_match) in
    
