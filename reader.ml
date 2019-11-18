@@ -1,4 +1,3 @@
-
 #use "pc.ml";;
 
 exception X_not_yet_implemented;;
@@ -156,14 +155,6 @@ let nilP s = match s with
 |[] -> Nil
 |_ -> raise X_no_match;;
 
-(*line comments*)
-let any_char_but_semi = const (fun ch -> ch != ';');; 
-let semiP = pack (char ';') (fun e-> [e]);; 
-let any_char_but_newline = const (fun ch -> ch != '\n');; 
-let end_of_line_or_input = disj (nt_end_of_input) (pack (char '\n') (fun e-> [e]));;
-let line_commentsP = pack (caten (caten semiP (star any_char_but_newline)) end_of_line_or_input)
-(fun ((semi, chars),end_of)-> [' ']) ;; 
-
 let make_range_char leq ch1 (s : char list) =
   pack (const (fun ch -> (leq ch1 ch))) (fun (e)-> [e]) s;;
 
@@ -216,27 +207,47 @@ let nt = caten nt nt_right in
 let nt = pack nt (function (e, _) -> e) in
   nt;;
 
+(*erase maybe*)
 let nt_whitespaces = star (char ' ');;
 
 let make_spaced nt = make_paired nt_whitespaces nt_whitespaces nt;;
+(*erase maybe*)
+
 
 let tok_dot = make_spaced (char '.');;
 (**)
 (*seperate comments from the sexpr like make_spaces*)
-let make_line_comments nt = make_paired (star line_commentsP) (star line_commentsP) nt;;
+(*line comments*)
+let any_char_but_semi = const (fun ch -> ch != ';');; 
+let semiP = pack (char ';') (fun e-> [e]);; 
+let any_char_but_newline = const (fun ch -> ch != '\n');; 
+let end_of_line_or_input = disj (nt_end_of_input) (pack (char '\n') (fun e-> [e]));;
+let line_commentsP  = pack (caten (caten semiP (star any_char_but_newline)) end_of_line_or_input)
+(fun ((semi, chars),end_of)-> [' ']) ;; 
 
-let whitespaces_or_comment = disj make_spaced make_line_comments;;
+let whitespace = (pack (char ' ') (fun e-> [e]));;
+let whitespaces_or_comment = disj line_commentsP whitespace;;
+let make_line_comments_or_whitespaces nt = make_paired (star whitespaces_or_comment) (star whitespaces_or_comment) nt;;
 
-let tok_lparen = make_spaced (char '(');;
+let tok_lparen =  make_line_comments_or_whitespaces (char '(');;
 
-let tok_rparen = make_spaced ( char ')');;
+let tok_rparen = make_line_comments_or_whitespaces( char ')');;
+
+type mList = { mutable listtags : string list };;
+let tagsList = { listtags = []};;
 
 let tagP = pack (caten (caten (word "#{") symbolP) (word "}")) (fun ((a,sexp),b) -> 
 match sexp with
-|Symbol(str) ->TagRef(str)
+|Symbol(str) -> let () = tagsList.listtags <- str ::tagsList.listtags in TagRef(str)
 |_ -> raise X_no_match);;
-type mList = { mutable listtags : string list };;
-let tagsList = { listtags = []};;
+
+let updateL str =
+let (updated, counter) = List.fold_right (fun curr_str (list_acc, count_acc) -> 
+if  (curr_str = str) then if (count_acc >= 1) (*already erase one*)
+then (curr_str ::list_acc, count_acc +1 ) else (list_acc, count_acc +1)
+else (curr_str :: list_acc, count_acc)) tagsList.listtags ([], 0)
+in  let () = tagsList.listtags <- updated in counter;;
+
 (*returns (sexp, rest of list) *)
 let rec nested_sexpr_parser l =
 let qoutedP = pack (caten (word "'") nested_sexpr_parser) 
@@ -266,15 +277,14 @@ pack (caten (caten (caten (caten tok_lparen (plus nested_sexpr_parser)) tok_dot)
 
 let exprTag =  caten (word "=") nested_sexpr_parser in
 
-
 let  taggedSexprP = pack (caten tagP (maybe exprTag)) (fun (tag, maybeR) ->
 match tag, maybeR with 
-| TagRef(tag_str), None ->  if ormap (function tagname -> tagname = tag_str) tagsList.listtags then tag
+| TagRef(tag_str), None -> let dTimes = updateL tag_str  in  if (dTimes > 1) then tag (*means is still the tag in the list *)
   else raise X_this_should_not_happen
-| TagRef(tag_str),Some((a, sexp)) -> if ormap (function tagname -> tagname = tag_str) tagsList.listtags then raise X_this_should_not_happen
-  else let () = tagsList.listtags <-  tag_str ::tagsList.listtags in  TaggedSexpr(tag_str, sexp)
+| TagRef(tag_str),Some((a, sexp)) -> let dTimes = updateL tag_str in if (dTimes > 1) then raise X_this_should_not_happen (*the name alrady existed*)
+  else let () = tagsList.listtags <- tag_str :: tagsList.listtags in TaggedSexpr(tag_str, sexp)
 | _, _ -> raise X_no_match) in
-   
+
 let sexpr_commentP l =  let (((com1, com2) , sexpr_com), rest) =  caten (caten (word "#;") nt_whitespaces) nested_sexpr_parser l
 in nested_sexpr_parser rest in
 let list_of_parsers = [unested_sexpr_parser; quate_parser; listP; dottedListP; sexpr_commentP ;taggedSexprP] in
