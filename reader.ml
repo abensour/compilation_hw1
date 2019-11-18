@@ -138,7 +138,6 @@ if (chf == '.') then
   else (Number(Float(fNum)),drest)
 else raise X_no_match ;;
 let floatP = not_followed_by floatPs symbolChar;;
-
 (*liad's work*)
 
 (*Boolean*)
@@ -160,6 +159,8 @@ let make_range_char leq ch1 (s : char list) =
 let rangeChar = make_range_char (fun ch1 ch2 -> ch1 < ch2);;
 
 let visibleSimpleChar = rangeChar  ' ';;
+
+let rangeWhiteSpaces = make_range_char (fun ch1 ch2 -> ch1 >= ch2);;
 
 let newline = pack (word_ci "newline") (fun l -> ['1';'0']);; 
 let nul = pack (word_ci "nul") (fun l -> ['0']);; 
@@ -207,7 +208,7 @@ let nt = pack nt (function (e, _) -> e) in
   nt;;
 
 (*erase maybe*)
-let nt_whitespaces = star (char ' ');;
+let nt_whitespaces = star (rangeWhiteSpaces ' ');;
 
 let make_spaced nt = make_paired nt_whitespaces nt_whitespaces nt;;
 (*erase maybe*)
@@ -224,7 +225,7 @@ let end_of_line_or_input = disj (nt_end_of_input) (pack (char '\n') (fun e-> [e]
 let line_commentsP  = pack (caten (caten semiP (star any_char_but_newline)) end_of_line_or_input)
 (fun ((semi, chars),end_of)-> [' ']) ;; 
 
-let whitespace = (pack (char ' ') (fun e-> [e]));;
+let whitespace = rangeWhiteSpaces ' ';;
 let whitespaces_or_comment = disj line_commentsP whitespace;;
 let make_line_comments_or_whitespaces nt = make_paired (star whitespaces_or_comment) (star whitespaces_or_comment) nt;;
 
