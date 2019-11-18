@@ -71,7 +71,7 @@ in if (charFloat >= (float_of_int base)) then raise X_no_match else ((integer +.
 let digOLetter = plus (disj digit abc) ;;
 
 
-let radixP l = let (((e,base),r),bNumber) = radixStart l in 
+let radixPs l = let (((e,base),r),bNumber) = radixStart l in 
 let number = List.map lowercase_ascii bNumber in  
 let ibase = int_of_string (list_to_string base) in 
 if ibase > 36 then raise X_no_match
@@ -89,7 +89,7 @@ if (chf != '.') then if sign == '+' then (Number(Int (int_of_float fnum)),floatb
 else  let (numFloat,rest) = digOLetter esf
 in let (fnumc,lengthc) = List.fold_left (getNumF ibase) (0., 1. /. (float_of_int ibase)) numFloat in (*fnum is the number ao the integer part*)
 if sign == '+' then (Number(Float(fnum +. fnumc)),rest) else (Number(Float(-1. *. (fnum +. fnumc))),rest) 
-
+let radixP = not_followed_by radixPs symbolChar;;
 (* ['+';'3';'5';'f'] -> (['+'; '3'; '5'], ['f']) *)
 let integerstart l= 
 match maybe plMin l with
@@ -98,8 +98,8 @@ match maybe plMin l with
 let (intg,rest) = digits e in
 ((result :: intg) ,rest);;
 
- 
-let integerP l= 
+
+let integerPs l= 
 let (number,sec) = integerstart l in (* get the number and the continuence *)
 match sec with
 | [] -> (Number(Int(int_of_string (list_to_string number))) ,[])  (*if no continuence than build the number*)
@@ -112,8 +112,9 @@ if ((lowercase_ascii ch) == 'e') then
   if (float_of_int(int_of_float fullNum) = fullNum) then (Number (Int (int_of_float fullNum)),rest)
   else (Number (Float  fullNum),rest)
 else if ((lowercase_ascii ch) == '.') then raise X_no_match else (Number(Int(int_of_string (list_to_string number))) ,sec);;
+let integerP = not_followed_by integerP symbolChar;;
 
-let floatP l= 
+let floatPs l= 
 let (number,sec) = integerstart l in (* get the number and the continuence *)
 match sec with
 | [] -> (Number(Int(int_of_string (list_to_string number))),[])
@@ -132,6 +133,7 @@ if (chf == '.') then
     else (Number (Float  fullNum),rest)
   else (Number(Float(fNum)),drest)
 else raise X_no_match ;;
+let floatP = not_followed_by floatPs symbolChar;;
 (*liad's work*)
 let boolP = 
 let tOrf = disj (word_ci "#t") (word_ci "#f") in 
@@ -273,7 +275,7 @@ match tag, maybeR with
    
 let sexpr_commentP l =  let (((com1, com2) , sexpr_com), rest) =  caten (caten (word "#;") nt_whitespaces) nested_sexpr_parser l
 in nested_sexpr_parser rest in
-let list_of_parsers = [unested_sexpr_parser; quate_parser; listP; dottedListP; sexpr_commentP;taggedSexprP] in
+let list_of_parsers = [unested_sexpr_parser; quate_parser; listP; dottedListP; sexpr_commentP ;taggedSexprP] in
 
 disj_list list_of_parsers l;;
 
