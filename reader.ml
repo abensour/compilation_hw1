@@ -1,5 +1,5 @@
 #use "pc.ml";;
-
+open PC;; 
 exception X_not_yet_implemented;;
 exception X_this_should_not_happen;;
 exception X_is_empty;;
@@ -44,22 +44,18 @@ let normalize_scheme_symbol str =
 	s) then str
   else Printf.sprintf "|%s|" str;;
 
-(* lishay work *)
 let digit = range '0' '9';;
 let digits = plus digit;;
 let plMin = disj (char '+') (char '-');;
 let abc = (range 'a' 'z') ;;
 
-(*liad's work *)
+(* Symbol parser *)
 let punctuation = const (fun ch-> ch= '!' || ch= '$' || ch= '^' || ch='*' || ch='-' || ch='_' || ch='='
 || ch='+' || ch='<' || ch='>' || ch='/' || ch ='?');;
 let symbolChar = disj_list [range_ci 'a' 'z'; digit ; punctuation];;
-let symbolP = pack (plus symbolChar) (fun e -> 
-let lowercase = List.map lowercase_ascii e in
+let symbolP = pack (plus symbolChar) (fun e -> let lowercase = List.map lowercase_ascii e in
 Symbol(list_to_string lowercase));;
-(*end liad's work*)
 
-(* lishay work *)
  (*radix notation parser *)
 let rorR = disj (char 'r') (char 'R') ;;
 let radixStart =  caten (caten (char '#') digits) rorR ;; (* ((('#', ['2'; '4']), 'r'), ['e'; 'f']) *)
@@ -138,68 +134,56 @@ if (chf == '.') then
   else (Number(Float(fNum)),drest)
 else raise X_no_match ;;
 let floatP = not_followed_by floatPs symbolChar;;
-(*liad's work*)
 
-(*Boolean*)
-let boolP = 
-let tOrf = disj (word_ci "#t") (word_ci "#f") in 
-pack tOrf (fun (boolean)-> 
-match boolean with
-| [_;'t'] -> Bool(true)
-| [_;'T'] -> Bool(true)
-| _ -> Bool(false));;
 
-let nilP s = match s with
-|[] -> Nil
-|_ -> raise X_no_match;;
+(*Boolean parser*)
+let nt_true = pack (word_ci "#t") (fun _-> Bool(true));;
+let nt_false = pack (word_ci "#f") (fun _-> Bool(false));;
+let boolP = disj nt_true nt_false;; 
 
+(*range comibnators *)
 let make_range_char leq ch1 (s : char list) =
   pack (const (fun ch -> (leq ch1 ch))) (fun (e)-> [e]) s;;
-
+(*parse all characters that are bigger than ch1*)
 let rangeChar = make_range_char (fun ch1 ch2 -> ch1 < ch2);;
+(*parse all characters that are smaller equal to ch1*)
+let rangeWhitespaces = make_range_char (fun ch1 ch2 -> ch1 >= ch2);;
 
-let visibleSimpleChar = rangeChar  ' ';;
+(* Char parser *)
+let newline = pack (word_ci "newline") (fun l -> ['\n']);; 
+let nul = pack (word_ci "nul") (fun l -> ['\000']);; 
+let space = pack (word_ci "space") (fun l -> [' ']);;
+let tab = pack (word_ci "tab") (fun l -> ['\r']);;
+let page = pack (word_ci "page") (fun l -> ['\012']);;
+let return = pack (word_ci "return") (fun l -> ['\r']);;
 
-let rangeWhiteSpaces = make_range_char (fun ch1 ch2 -> ch1 >= ch2);;
+let visibleSimpleChar = rangeChar  ' ';; (*any char that is bigger than space*)
 
-let newline = pack (word_ci "newline") (fun l -> ['1';'0']);; 
-let nul = pack (word_ci "nul") (fun l -> ['0']);; 
-let space = pack (word_ci "space") (fun l -> ['3'; '2']);;
-let tab = pack (word_ci "tab") (fun l -> ['9']);;
-let page = pack (word_ci "page") (fun l -> ['1';'2']);;
-let return = pack (word_ci "return") (fun l -> ['1'; '3']);;
-
-let namedChar s = 
-try disj newline nul s 
-with X_no_match -> try disj space tab s
-with X_no_match -> try disj page return s 
-with X_no_match -> raise X_no_match;;
+let namedChar =  disj_list [newline ; nul; space; tab; page;return];;
 
 let charP  =  
 pack (caten (word "#\\") (disj namedChar visibleSimpleChar))
-(fun (l, e) -> match e with
-| ch::[] -> Char(ch)
-| es -> Char(char_of_int(int_of_string(list_to_string es))));;
+(fun (l, ch) ->  match ch with 
+|ch:: [] -> Char(ch)
+|_ -> raise X_this_should_not_happen);;                                         
 
-(* support in 34 is missing *)
-(*ascii code of special char*)
+
+(* String parser *)
+(*check this dont know what to do !!!!!!!*)
 let doubleQuoteInS = pack (word "\\\"") (fun e -> '\"');;
-let otherMetaChar = const (fun ch -> ch= char_of_int(13) || ch= char_of_int(10) 
-|| ch= char_of_int(9)|| ch= char_of_int(12)|| ch= char_of_int(92)) ;;
-let stringMetaChar = disj doubleQuoteInS otherMetaChar;;
+let pageChar = pack (word "\\f") (fun e -> '\012') ;;
+let otherMetaChar = const (fun ch -> ch= '\r' || ch= '\n'|| ch= '\t' || ch= '\\') ;;
+let stringMetaChar = disj_list [doubleQuoteInS; pageChar;otherMetaChar];;
 let stringLiteralChar = const (fun ch -> ch != '"' && ch != '\\' );;
 let stringChar = disj stringLiteralChar stringMetaChar ;;
 let doubleQuote = char '"';;
-
-let stringP  =  
-let pars = caten (caten doubleQuote (star stringChar)) doubleQuote in (* (((a,b),c),[])*)
+let stringP  =  let pars = caten (caten doubleQuote (star stringChar)) doubleQuote in 
 pack pars (fun ((l,s),r) -> String(list_to_string(s))) ;;
-
 
 let unested_sexpr_parser s = 
 disj_list [boolP; charP;  integerP; floatP ; radixP ; stringP; symbolP] s ;; 
 
-(*taken from practice lesson*)
+
 let make_paired nt_left nt_right nt =
 let nt = caten nt_left nt in
 let nt = pack nt (function (_, e) -> e) in
@@ -208,15 +192,11 @@ let nt = pack nt (function (e, _) -> e) in
   nt;;
 
 (*erase maybe*)
-let nt_whitespaces = star (rangeWhiteSpaces ' ');;
+let nt_whitespaces = star (rangeWhitespaces ' ');;
 
 let make_spaced nt = make_paired nt_whitespaces nt_whitespaces nt;;
 (*erase maybe*)
 
-
-let tok_dot = make_spaced (char '.');;
-(**)
-(*seperate comments from the sexpr like make_spaces*)
 (*line comments*)
 let any_char_but_semi = const (fun ch -> ch != ';');; 
 let semiP = pack (char ';') (fun e-> [e]);; 
@@ -225,21 +205,9 @@ let end_of_line_or_input = disj (nt_end_of_input) (pack (char '\n') (fun e-> [e]
 let line_commentsP  = pack (caten (caten semiP (star any_char_but_newline)) end_of_line_or_input)
 (fun ((semi, chars),end_of)-> [' ']) ;; 
 
-let whitespace = rangeWhiteSpaces ' ';;
-let whitespaces_or_comment = disj line_commentsP whitespace;;
-let make_line_comments_or_whitespaces nt = make_paired (star whitespaces_or_comment) (star whitespaces_or_comment) nt;;
-
-let tok_lparen =  make_line_comments_or_whitespaces (char '(');;
-
-let tok_rparen = make_line_comments_or_whitespaces( char ')');;
-
+(* list of tagged symbols *)
 type mList = { mutable listtags : string list };;
 let tagsList = { listtags = []};;
-
-let tagP = pack (caten (caten (word "#{") symbolP) (word "}")) (fun ((a,sexp),b) -> 
-match sexp with
-|Symbol(str) -> let () = tagsList.listtags <- str ::tagsList.listtags in TagRef(str)
-|_ -> raise X_no_match);;
 
 let updateL str =
 let (updated, counter) = List.fold_right (fun curr_str (list_acc, count_acc) -> 
@@ -250,32 +218,49 @@ in  let () = tagsList.listtags <- updated in counter;;
 
 (*returns (sexp, rest of list) *)
 let rec nested_sexpr_parser l =
+
+(*sexp comment*)
+let sexpr_commentP  = pack (caten (caten (word "#;") nt_whitespaces) nested_sexpr_parser )
+(fun ((l,whitespaces), sexpr)-> [' ']) in 
+
+(*skip*)
+let whitespace = rangeWhitespaces ' ' in 
+let whitespaces_or_comment = disj_list [line_commentsP; sexpr_commentP; whitespace] in
+let make_comments_or_whitespaces nt = make_paired (star whitespaces_or_comment) (star whitespaces_or_comment) nt in
+
+let tok_lparen =  make_comments_or_whitespaces (char '(') in 
+let tok_rparen = make_comments_or_whitespaces( char ')') in 
+let tok_dot = make_comments_or_whitespaces (char '.') in 
+let clean_word nt = make_comments_or_whitespaces nt in 
+
+(*Qoutes*)
 let qoutedP = pack (caten (word "'") nested_sexpr_parser) 
 (fun (q, s) -> Pair(Symbol "quote", Pair(s, Nil))) in
-
 let quasiP = pack (caten (word "`") nested_sexpr_parser) 
 (fun (q, s) -> Pair(Symbol "quasiqoute", Pair(s, Nil))) in
-
 let unqouteSpliceP = pack (caten (word ",@") nested_sexpr_parser) 
 (fun (q, s) -> Pair(Symbol "unquote-splicing", Pair(s, Nil))) in
-
 let unqoutP = pack (caten (word ",") nested_sexpr_parser) 
 (fun (q, s) -> Pair(Symbol "unquote", Pair(s, Nil))) in
-
 let quate_parser = disj_list [qoutedP ; quasiP ; unqouteSpliceP; unqoutP] in
 
-(* ( (  ('(', [sexp1;sexp2;...])  , ')' ), rest list ) *)
-(*make it a nested pair *)
-(* check empty list*)
+(*list*)
 let listP =   pack (caten (caten tok_lparen (star nested_sexpr_parser)) tok_rparen)
 (fun ((lpar, list_of_sexp), rpar) -> List.fold_right (fun curr acc ->  Pair(curr, acc)) list_of_sexp Nil) in
 
+(*Dotted list*)
 let dottedListP = 
 pack (caten (caten (caten (caten tok_lparen (plus nested_sexpr_parser)) tok_dot) nested_sexpr_parser )tok_rparen)
 (fun ((((lpar, list_of_sexp), dot), sp), rpar) -> List.fold_right 
 (fun curr acc ->  Pair(curr, acc)) list_of_sexp sp) in
 
-let exprTag =  caten (word "=") nested_sexpr_parser in
+(*Tag*)
+let tagP = pack (caten (caten (clean_word (word "#{")) symbolP) (clean_word (word "}"))) (fun ((a,sexp),b) -> 
+match sexp with
+|Symbol(str) -> let () = tagsList.listtags <- str ::tagsList.listtags in TagRef(str)
+|_ -> raise X_no_match) in
+
+let exprTag =  caten (clean_word (word "=")) nested_sexpr_parser in
 
 let  taggedSexprP = pack (caten tagP (maybe exprTag)) (fun (tag, maybeR) ->
 match tag, maybeR with 
@@ -285,11 +270,10 @@ match tag, maybeR with
   else let () = tagsList.listtags <- tag_str :: tagsList.listtags in TaggedSexpr(tag_str, sexp)
 | _, _ -> raise X_no_match) in
 
-let sexpr_commentP l =  let (((com1, com2) , sexpr_com), rest) =  caten (caten (word "#;") nt_whitespaces) nested_sexpr_parser l
-in nested_sexpr_parser rest in
-let list_of_parsers = [unested_sexpr_parser; quate_parser; listP; dottedListP; sexpr_commentP ;taggedSexprP] in
 
- make_line_comments_or_whitespaces (disj_list list_of_parsers) l ;;
+let list_of_parsers = [unested_sexpr_parser; quate_parser; listP; dottedListP; taggedSexprP] in
+
+ make_comments_or_whitespaces (disj_list list_of_parsers) l ;;
 
 (*main method gets string returns sexp*)
 let read_sexpr string = 
