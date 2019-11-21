@@ -139,7 +139,7 @@ let floatP = not_followed_by floatPs symbolChar;;
 (*Boolean parser*)
 let nt_true = pack (word_ci "#t") (fun _-> Bool(true));;
 let nt_false = pack (word_ci "#f") (fun _-> Bool(false));;
-let boolP = disj nt_true nt_false;; 
+let boolP = disj nt_true nt_false ;; 
 
 (*range comibnators *)
 let make_range_char leq ch1 (s : char list) =
@@ -161,11 +161,10 @@ let visibleSimpleChar = rangeChar  ' ';; (*any char that is bigger than space*)
 
 let namedChar =  disj_list [newline ; nul; space; tab; page;return];;
 
-let charP  =  
-pack (caten (word "#\\") (disj namedChar visibleSimpleChar))
+let charP  =  pack (caten (word "#\\") (disj namedChar visibleSimpleChar))
 (fun (l, ch) ->  match ch with 
 |ch:: [] -> Char(ch)
-|_ -> raise X_this_should_not_happen);;                                         
+|_ -> raise X_this_should_not_happen) ;;                                         
 
 
 (* String parser *)
