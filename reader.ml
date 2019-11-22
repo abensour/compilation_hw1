@@ -76,7 +76,7 @@ let radixPs l = let (((e,base),r),bNumber) = radixStart l in
 let number = List.map lowercase_ascii bNumber in  
 let ibase = int_of_string (list_to_string base) in 
 if ibase > 36 then raise X_no_match
-else 
+else if ibase < 2 then raise X_no_match else
 let (sign,num) = 
 match maybe plMin number with
 | (None,e) -> ('+',e)
@@ -110,8 +110,7 @@ if ((lowercase_ascii ch) == 'e') then
   let fNumber = float_of_string (list_to_string number) in
   let fExpo = float_of_string (list_to_string exponent) in
   let fullNum = fNumber *. (10. ** fExpo) in 
-  if (float_of_int(int_of_float fullNum) = fullNum) then (Number (Int (int_of_float fullNum)),rest)
-  else (Number (Float  fullNum),rest)
+  (Number (Float  fullNum),rest)
 else if ((lowercase_ascii ch) == '.') then raise X_no_match else (Number(Int(int_of_string (list_to_string number))) ,sec);;
 let integerP = not_followed_by integerPs symbolChar;;
 
@@ -130,8 +129,7 @@ if (chf == '.') then
     let (exponent,rest) = integerstart es in 
     let fExpo = float_of_string (list_to_string exponent) in
     let fullNum = fNum *. (10. ** fExpo) in 
-    if (float_of_int(int_of_float fullNum) = fullNum) then (Number (Int (int_of_float fullNum)),rest)
-    else (Number (Float  fullNum),rest)
+    (Number (Float  fullNum),rest)
   else (Number(Float(fNum)),drest)
 else raise X_no_match ;;
 let floatP = not_followed_by floatPs symbolChar;;
