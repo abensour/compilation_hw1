@@ -32,11 +32,12 @@ let rec sexpr_eq s1 s2 =
   | TagRef(name1), TagRef(name2) -> name1 = name2
   | _ -> false;;
   
-(*module Reader: sig
+module Reader: sig
   val read_sexpr : string -> sexpr
   val read_sexprs : string -> sexpr list
-end *)
-module Reader = struct
+end
+= struct
+
 let normalize_scheme_symbol str =
   let s = string_to_list str in
   if (andmap
@@ -51,7 +52,7 @@ let abc = (range 'a' 'z') ;;
 
 (* Symbol parser *)
 let punctuation = const (fun ch-> ch= '!' || ch= '$' || ch= '^' || ch='*' || ch='-' || ch='_' || ch='='
-|| ch='+' || ch='<' || ch='>' || ch='/' || ch ='?');;
+|| ch='+' || ch='<' || ch='>' || ch='/' || ch ='?' || ch= ':');;
 let symbolChar = disj_list [range_ci 'a' 'z'; digit ; punctuation];;
 let symbolP = pack (plus symbolChar) (fun e -> let lowercase = List.map lowercase_ascii e in
 Symbol(list_to_string lowercase));;
@@ -151,10 +152,10 @@ let rangeWhitespaces = make_range_char (fun ch1 ch2 -> ch1 >= ch2);;
 
 (* Char parser *)
 let newline = pack (word_ci "newline") (fun l -> ['\n']);; 
-let nul = pack (word_ci "nul") (fun l -> ['\000']);; 
+let nul = pack (word_ci "nul") (fun l -> [Char.chr 0]);; 
 let space = pack (word_ci "space") (fun l -> [' ']);;
-let tab = pack (word_ci "tab") (fun l -> ['\r']);;
-let page = pack (word_ci "page") (fun l -> ['\012']);;
+let tab = pack (word_ci "tab") (fun l -> ['\t']);;
+let page = pack (word_ci "page") (fun l -> [Char.chr 12]);;
 let return = pack (word_ci "return") (fun l -> ['\r']);;
 
 let visibleSimpleChar = rangeChar  ' ';; (*any char that is bigger than space*)
@@ -170,9 +171,9 @@ let charP  =  pack (caten (word "#\\") (disj namedChar visibleSimpleChar))
 (* String parser *)
 (*check this dont know what to do !!!!!!!*)
 let doubleQuoteInS = pack (word "\\\"") (fun e -> '\"');;
-let pageChar = pack (word "\\f") (fun e -> '\012') ;;
+let pageChar = pack (word "\\f") (fun e -> Char.chr 12) ;;
 let otherMetaChar = const (fun ch -> ch= '\r' || ch= '\n'|| ch= '\t' || ch= '\\') ;;
-let stringMetaChar = disj_list [doubleQuoteInS; pageChar;otherMetaChar];;
+let stringMetaChar = disj_list [doubleQuoteInS; pageChar; otherMetaChar];;
 let stringLiteralChar = const (fun ch -> ch != '"' && ch != '\\' );;
 let stringChar = disj stringLiteralChar stringMetaChar ;;
 let doubleQuote = char '"';;
@@ -232,16 +233,16 @@ let tok_rparen = make_comments_or_whitespaces( char ')') in
 let tok_dot = make_comments_or_whitespaces (char '.') in 
 let clean_word nt = make_comments_or_whitespaces nt in 
 
-(*Qoutes*)
-let qoutedP = pack (caten (word "'") nested_sexpr_parser) 
+(*Quotes*)
+let quotedP = pack (caten (word "'") nested_sexpr_parser) 
 (fun (q, s) -> Pair(Symbol "quote", Pair(s, Nil))) in
 let quasiP = pack (caten (word "`") nested_sexpr_parser) 
-(fun (q, s) -> Pair(Symbol "quasiqoute", Pair(s, Nil))) in
-let unqouteSpliceP = pack (caten (word ",@") nested_sexpr_parser) 
+(fun (q, s) -> Pair(Symbol "quasiquote", Pair(s, Nil))) in
+let unquoteSpliceP = pack (caten (word ",@") nested_sexpr_parser) 
 (fun (q, s) -> Pair(Symbol "unquote-splicing", Pair(s, Nil))) in
-let unqoutP = pack (caten (word ",") nested_sexpr_parser) 
+let unquotP = pack (caten (word ",") nested_sexpr_parser) 
 (fun (q, s) -> Pair(Symbol "unquote", Pair(s, Nil))) in
-let quate_parser = disj_list [qoutedP ; quasiP ; unqouteSpliceP; unqoutP] in
+let quote_parser = disj_list [quotedP ; quasiP ; unquoteSpliceP; unquotP] in
 
 (*list*)
 let listP =   pack (caten (caten tok_lparen (star nested_sexpr_parser)) tok_rparen)
@@ -270,16 +271,19 @@ match tag, maybeR with
 | _, _ -> raise X_no_match) in
 
 
-let list_of_parsers = [unested_sexpr_parser; quate_parser; listP; dottedListP; taggedSexprP] in
+let list_of_parsers = [unested_sexpr_parser; quote_parser; listP; dottedListP; taggedSexprP] in
 
  make_comments_or_whitespaces (disj_list list_of_parsers) l ;;
 
-(*main method gets string returns sexp*)
+(*expect to get only one sexp otherwise raise exception*)
 let read_sexpr string = 
 let list_of_char = string_to_list string in 
-let (sexpr, rest) = nested_sexpr_parser list_of_char
-in sexpr;;
+let (sexpr, rest) = nested_sexpr_parser list_of_char in
+match rest with 
+| []-> sexpr
+|_ -> String("test failed");;
 
+(*main method gets string returns list of sexps*)
 let read_sexprs string = 
 let list_of_char = string_to_list string in 
 let (sexpr_list, rest) = (star nested_sexpr_parser) list_of_char in 
