@@ -168,10 +168,13 @@ let charP  =  pack (caten (word "#\\") (disj namedChar visibleSimpleChar))
 
 (* String parser *)
 (*check this dont know what to do !!!!!!!*)
-let doubleQuoteInS = pack (word "\\\"") (fun e -> '\"');;
-let pageChar = pack (word "\\f") (fun e -> Char.chr 12) ;;
-let otherMetaChar = const (fun ch -> ch= '\r' || ch= '\n'|| ch= '\t' || ch= '\\') ;;
-let stringMetaChar = disj_list [doubleQuoteInS; pageChar; otherMetaChar];;
+let retS = pack (word "\\r") (fun e -> Char.chr 13) ;;
+let newlineS = pack (word "\\n") (fun e -> Char.chr 10) ;;
+let tabS = pack (word "\\t") (fun e -> Char.chr 9) ;;
+let pageS = pack (word "\\f") (fun e -> Char.chr 12) ;;
+let doubleBack = pack (word "\\\\") (fun e -> Char.chr 92) ;;
+let doubleQuoteInS = pack (word "\\\"") (fun e -> '"');;
+let stringMetaChar = disj_list [doubleQuoteInS; pageS; retS ; newlineS; tabS ; doubleBack];;
 let stringLiteralChar = const (fun ch -> ch != '"' && ch != '\\' );;
 let stringChar = disj stringLiteralChar stringMetaChar ;;
 let doubleQuote = char '"';;
