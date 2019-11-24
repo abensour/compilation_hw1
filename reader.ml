@@ -282,7 +282,7 @@ let list_of_char = string_to_list string in
 let (sexpr, rest) = nested_sexpr_parser list_of_char in
 match rest with 
 | []-> sexpr
-|_ -> String("test failed");;
+|_ -> raise X_this_should_not_happen;;
 
 (*main method gets string returns list of sexps*)
 let read_sexprs string = 
