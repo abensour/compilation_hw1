@@ -284,12 +284,12 @@ match rest with
 | []-> sexpr
 |_ -> raise X_this_should_not_happen;;
 
-let nt_sexprs = let () = tagsList.listtags <-[] in nested_sexpr_parser;;
+let nt_sexprs = let () = tagsList.listtags <-[] in let () = printf("deleted") in nested_sexpr_parser;;
 
 (*main method gets string returns list of sexps*)
 let read_sexprs string = 
 let list_of_char = string_to_list string in 
-let (sexpr_list, rest) = (star nested_sexpr_parser) list_of_char in 
+let (sexpr_list, rest) = (star nt_sexprs) list_of_char in 
 match rest with 
 |[] -> sexpr_list
 |_ -> raise X_this_should_not_happen;;
