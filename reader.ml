@@ -284,7 +284,7 @@ match rest with
 | []-> sexpr
 |_ -> raise X_this_should_not_happen;;
 
-let nt_sexprs = let () = tagsList.listtags <-[] in let () = printf("deleted") in nested_sexpr_parser;;
+let nt_sexprs l = let () = tagsList.listtags <-[] in nested_sexpr_parser l;;
 
 (*main method gets string returns list of sexps*)
 let read_sexprs string = 
