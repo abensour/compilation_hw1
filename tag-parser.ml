@@ -58,8 +58,26 @@ let reserved_word_list =
    "unquote-splicing"];;  
 
 (* work on the tag parser starts here *)
+let isReserved str = List.fold_right (fun curr acc-> if(curr == str) then true else acc) false reserved_word_list;;
 
-let tag_parse_expression sexpr = raise X_not_yet_implemented;;
+let tag_parse_expression sexpr = function  
+| Pair(Symbol("let"), Pair(Nil, Pair(body, Nil))) ->
+| Pair(Symbol("let"), Pair(Pair(rib, ribs), Pair(body, Nil))) -> 
+| Pair(Symbol("if"), Pair(test, Pair(dit, Pair(dif, Nil)))) ->
+If(tag_parse_expression  test, tag_parse_expression dit, tag_parse_expression dif)
+| Pair(Symbol("if"), Pair(test,Pair(dit, Nil))) ->
+If(tag_parse_expression  test, tag_parse_expression dit, Const(Void))
+s| Pair(Symbol("quote"), Pair(x, Nil)) -> Const(Sexpr(x)) 
+| Symbol(x) -> if(isReserved(x) = false) then Var(Sexpr(Symbol(x))) 
+|TagRef(x) -> Const(Sexpr(TagRef(x)))
+|TaggedSexpr (st, Pair (Symbol "quote", Pair (x, Nil))) -> Const(Sexpr(TaggedSexpr(st, x)))
+|TaggedSexpr (st,x) -> Const(Sexpr(TaggedSexpr(st, x)))
+(*unquoted sexspr *)
+| Number(x) -> Const(Sexpr(Number(x)))
+| Bool(x) -> Const(Sexpr(Bool(x)))
+| Char(x) -> Const(Sexpr(Char(x)))
+| String(x) -> Const(Sexpr(String(x)))
+
 
 let tag_parse_expressions sexpr = raise X_not_yet_implemented;;
 
