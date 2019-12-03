@@ -58,20 +58,47 @@ let reserved_word_list =
    "unquote-splicing"];;  
 
 (* work on the tag parser starts here *)
-let isReserved str = List.fold_right (fun curr acc-> if(curr == str) then true else acc) false reserved_word_list;;
+let isReserved str = List.fold_right (fun curr acc-> if(curr == str) then true else acc) reserved_word_list  false;;
+(*pair to proper list*)
+let rec pair_to_list f pair= match pair with
+|Pair(x, Nil) -> []
+|Pair(x, rest) -> (f x) :: (pair_to_list f rest)
+|_ -> raise X_syntax_error;;
+
+let rec isProper pair = match pair with
+|Pair(x, Nil) -> true
+|Pair(x, y) -> isProper(y)
+|Pair(x,_) -> false (*improper list*)
+|_-> raise X_syntax_error;; 
+
+let pull_string pair = pair_to_list 
+(fun(x)-> match x with
+|Symbol(x)-> x
+|_ -> raise X_syntax_error) pair;;
 
 let tag_parse_expression sexpr = function  
-| Pair(Symbol("let"), Pair(Nil, Pair(body, Nil))) ->
-| Pair(Symbol("let"), Pair(Pair(rib, ribs), Pair(body, Nil))) -> 
-| Pair(Symbol("if"), Pair(test, Pair(dit, Pair(dif, Nil)))) ->
+(*| Pair(Symbol("let"), Pair(Nil, Pair(body, Nil))) ->
+| Pair(Symbol("let"), Pair(Pair(rib, ribs), Pair(body, Nil))) -> *)
+
+(*to check*)
+(*| Pair(closure, args_list)-> Applic((tag_parse_expression closure), (pair_to_list tag_parse_expression args_list))
+
+| Pair(Symbol("lambda"), Pair(list_of_param, Pair(body, Nil)))-> 
+  if(isProper list_of_param) then LambdaSimple(pull_string list_of_param , tag_parse_expression body)
+  else LambdaOpt(list_of_param, optional, tag_parse_expression body)
+| Pair(Symbol("lambda"), Pair(Symbol(sym), Pair(body, Nil)))-> LambdaOpt([],sym, tag_parse_expression body)
+*)
+(*to check*)
+(*| Pair(Symbol("if"), Pair(test, Pair(dit, Pair(dif, Nil)))) ->
 If(tag_parse_expression  test, tag_parse_expression dit, tag_parse_expression dif)
 | Pair(Symbol("if"), Pair(test,Pair(dit, Nil))) ->
 If(tag_parse_expression  test, tag_parse_expression dit, Const(Void))
-s| Pair(Symbol("quote"), Pair(x, Nil)) -> Const(Sexpr(x)) 
+| Pair(Symbol("quote"), Pair(x, Nil)) -> Const(Sexpr(x)) 
 | Symbol(x) -> if(isReserved(x) = false) then Var(Sexpr(Symbol(x))) 
-|TagRef(x) -> Const(Sexpr(TagRef(x)))
-|TaggedSexpr (st, Pair (Symbol "quote", Pair (x, Nil))) -> Const(Sexpr(TaggedSexpr(st, x)))
-|TaggedSexpr (st,x) -> Const(Sexpr(TaggedSexpr(st, x)))
+| TagRef(x) -> Const(Sexpr(TagRef(x)))
+| TaggedSexpr (st, Pair (Symbol "quote", Pair (x, Nil))) -> Const(Sexpr(TaggedSexpr(st, x)))
+| TaggedSexpr (st,x) -> Const(Sexpr(TaggedSexpr(st, x)))
+*)
 (*unquoted sexspr *)
 | Number(x) -> Const(Sexpr(Number(x)))
 | Bool(x) -> Const(Sexpr(Bool(x)))
