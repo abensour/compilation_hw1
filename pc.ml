@@ -36,6 +36,7 @@ let list_to_string s =
 module PC = struct
 
 (* the parsing combinators defined here *)
+  
 exception X_not_yet_implemented;;
 
 exception X_no_match;;
@@ -177,21 +178,12 @@ let trace_pc desc nt s =
 		   (list_to_string s) ;
      raise X_no_match);;
 
-let pow =
-  let rec pow' a x n =
-    if n = 0 then a else pow' (a * (if n mod 2 = 0 then 1 else x)) (x * x) (n / 2) in
-  pow' 1 ;;
-
 (* testing the parsers *)
 
 let test_string nt str =
   let (e, s) = (nt (string_to_list str)) in
   (e, (Printf.sprintf "->[%s]" (list_to_string s)));;
 
-
-
-
- 
 end;; (* end of struct PC *)
 
 (* end-of-input *)

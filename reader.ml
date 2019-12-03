@@ -2,7 +2,7 @@
 open PC;; 
 exception X_not_yet_implemented;;
 exception X_this_should_not_happen;;
-exception X_is_empty;;
+
 type number =
   | Int of int
   | Float of float;;
@@ -99,7 +99,6 @@ match maybe plMin l with
 let (intg,rest) = digits e in
 ((result :: intg) ,rest);;
 
-
 let integerPs l= 
 let (number,sec) = integerstart l in (* get the number and the continuence *)
 match sec with
@@ -134,7 +133,6 @@ if (chf == '.') then
 else raise X_no_match ;;
 let floatP = not_followed_by floatPs symbolChar;;
 
-
 (*Boolean parser*)
 let nt_true = pack (word_ci "#t") (fun _-> Bool(true));;
 let nt_false = pack (word_ci "#f") (fun _-> Bool(false));;
@@ -163,11 +161,10 @@ let namedChar =  disj_list [newline ; nul; space; tab; page;return];;
 let charP  =  pack (caten (word "#\\") (disj namedChar visibleSimpleChar))
 (fun (l, ch) ->  match ch with 
 |ch:: [] -> Char(ch)
-|_ -> raise X_this_should_not_happen) ;;                                         
+|_ -> raise X_no_match) ;;                                         
 
 
 (* String parser *)
-(*check this dont know what to do !!!!!!!*)
 let retS = pack (word "\\r") (fun e -> Char.chr 13) ;;
 let newlineS = pack (word "\\n") (fun e -> Char.chr 10) ;;
 let tabS = pack (word "\\t") (fun e -> Char.chr 9) ;;
@@ -184,7 +181,6 @@ pack pars (fun ((l,s),r) -> String(list_to_string(s))) ;;
 let unested_sexpr_parser s = 
 disj_list [boolP; charP;  integerP; floatP ; radixP ; stringP; symbolP] s ;; 
 
-
 let make_paired nt_left nt_right nt =
 let nt = caten nt_left nt in
 let nt = pack nt (function (_, e) -> e) in
@@ -192,11 +188,7 @@ let nt = caten nt nt_right in
 let nt = pack nt (function (e, _) -> e) in
   nt;;
 
-(*erase maybe*)
 let nt_whitespaces = star (rangeWhitespaces ' ');;
-
-let make_spaced nt = make_paired nt_whitespaces nt_whitespaces nt;;
-(*erase maybe*)
 
 (*line comments*)
 let any_char_but_semi = const (fun ch -> ch != ';');; 
@@ -205,17 +197,6 @@ let any_char_but_newline = const (fun ch -> ch != '\n');;
 let end_of_line_or_input = disj (nt_end_of_input) (pack (char '\n') (fun e-> [e]));;
 let line_commentsP  = pack (caten (caten semiP (star any_char_but_newline)) end_of_line_or_input)
 (fun ((semi, chars),end_of)-> [' ']) ;; 
-
-(* list of tagged symbols *)
-type mList = { mutable listtags : string list };;
-let tagsList = { listtags = []};;
-
-let updateL str =
-let (updated, counter) = List.fold_right (fun curr_str (list_acc, count_acc) -> 
-if  (curr_str = str) then if (count_acc >= 1) (*already erase one*)
-then (curr_str ::list_acc, count_acc +1 ) else (list_acc, count_acc +1)
-else (curr_str :: list_acc, count_acc)) tagsList.listtags ([], 0)
-in  let () = tagsList.listtags <- updated in counter;;
 
 (*returns (sexp, rest of list) *)
 let rec nested_sexpr_parser l =
@@ -258,17 +239,15 @@ pack (caten (caten (caten (caten tok_lparen (plus nested_sexpr_parser)) tok_dot)
 (*Tag*)
 let tagP = pack (caten (caten (clean_word (word "#{")) symbolP) (clean_word (word "}"))) (fun ((a,sexp),b) -> 
 match sexp with
-|Symbol(str) -> let () = tagsList.listtags <- str ::tagsList.listtags in TagRef(str)
+|Symbol(str) -> TagRef(str)
 |_ -> raise X_no_match) in
 
 let exprTag =  caten (clean_word (word "=")) nested_sexpr_parser in
 
 let  taggedSexprP = pack (caten tagP (maybe exprTag)) (fun (tag, maybeR) ->
 match tag, maybeR with 
-| TagRef(tag_str), None -> let dTimes = updateL tag_str  in  if (dTimes > 1) then tag (*means is still the tag in the list *)
-  else raise X_this_should_not_happen
-| TagRef(tag_str),Some((a, sexp)) -> let dTimes = updateL tag_str in if (dTimes > 1) then raise X_this_should_not_happen (*the name alrady existed*)
-  else let () = tagsList.listtags <- tag_str :: tagsList.listtags in TaggedSexpr(tag_str, sexp)
+| TagRef(tag_str), None -> tag 
+| TagRef(tag_str),Some((a, sexp)) -> TaggedSexpr(tag_str, sexp)
 | _, _ -> raise X_no_match) in
 
 
@@ -276,15 +255,30 @@ let list_of_parsers = [unested_sexpr_parser; quote_parser; listP; dottedListP; t
 
  make_comments_or_whitespaces (disj_list list_of_parsers) l ;;
 
+
+(* list of tagged symbols *)
+type mList = { mutable listtags : string list };;
+let tagsList = { listtags = []};;
+
+ let rec checkTaggedRef sexp =  match sexp with 
+ |TaggedSexpr(ref_str, nsexp) -> let is_exist = List.fold_right (fun curr_str acc -> 
+ if(curr_str = ref_str) then true else acc) tagsList.listtags false in 
+ if(is_exist = true) then raise X_this_should_not_happen else let ()= tagsList.listtags <- ref_str :: tagsList.listtags in 
+ TaggedSexpr(ref_str, checkTaggedRef nsexp)
+ |Pair(sexp1, sexp2)-> let sexp1_res = checkTaggedRef sexp1 in let sexp2_res = checkTaggedRef sexp2 in
+ Pair(sexp1_res, sexp2_res)
+ |_-> sexp;; 
+ 
+let nt_sexprs l = let () = tagsList.listtags <-[] in 
+let (sexp, rest) =  nested_sexpr_parser l in (checkTaggedRef sexp, rest);;
+
 (*expect to get only one sexp otherwise raise exception*)
 let read_sexpr string = 
 let list_of_char = string_to_list string in 
-let (sexpr, rest) = nested_sexpr_parser list_of_char in
+let (sexpr, rest) = nt_sexprs list_of_char in
 match rest with 
 | []-> sexpr
-|_ -> raise X_this_should_not_happen;;
-
-let nt_sexprs l = let () = tagsList.listtags <-[] in nested_sexpr_parser l;;
+|_ -> raise X_no_match;;
 
 (*main method gets string returns list of sexps*)
 let read_sexprs string = 
@@ -292,7 +286,6 @@ let list_of_char = string_to_list string in
 let (sexpr_list, rest) = (star nt_sexprs) list_of_char in 
 match rest with 
 |[] -> sexpr_list
-|_ -> raise X_this_should_not_happen;;
-
+|_ -> raise X_no_match;;
  
-end;; (* struct Reader *)
+ end;; (* struct Reader *)
