@@ -66,6 +66,7 @@ let reserved_word_list =
 let isReserved str = List.fold_right (fun curr acc-> if(curr = str) then true else acc) reserved_word_list false;;
 (*pair to proper list*)
 let rec pair_to_list f pair= match pair with
+|Nil -> []
 |Pair(x, Nil) -> [f x]
 |Pair(x, rest) -> (f x) :: (pair_to_list f rest)
 |_ -> raise X_syntax_error;;
@@ -85,14 +86,18 @@ let pull_string pair = pair_to_list
 |_ -> raise X_syntax_error) pair;;
 
 let rec tag_pars sexpr = match sexpr with
-| Pair(Symbol("lambda"), Pair(list_of_param, Pair(body, Nil)))-> pull_string list_of_param
+| Pair(Symbol("lambda"), Pair(list_of_param, Pair(body, Nil)))-> body
 |_-> raise X_syntax_error;;
 
 let rec tag_parse sexpr = match sexpr with 
 (*| Pair(Symbol("let"), Pair(Nil, Pair(body, Nil))) -> 
 | Pair(Symbol("let"), Pair(Pair(rib, ribs), Pair(body, Nil))) ->  *)
 (*to check*)
-| Pair(closure, args_list)-> Applic((tag_parse closure), (pair_to_list tag_parse args_list))
+
+| Pair(Symbol("begin"), Nil) -> Const(Void)
+| Pair(Symbol("or") , list_of_params) -> let exp_list = pair_to_list tag_parse list_of_params in Or(exp_list)
+| Pair(Symbol("set!"), Pair(id, Pair (value,Nil))) -> Set((tag_parse id),(tag_parse value))
+| Pair(Symbol("define"), Pair(nameVar , Pair(exp , Nil))) -> Def(tag_parse nameVar, tag_parse exp)
 | Pair(Symbol("lambda"), Pair(Symbol(sym), Pair(body, Nil)))-> LambdaOpt([],sym, tag_parse body)
 | Pair(Symbol("lambda"), Pair(list_of_param, Pair(body, Nil)))-> 
   let optional = getOptinal list_of_param in 
@@ -104,12 +109,11 @@ let rec tag_parse sexpr = match sexpr with
 | Pair(Symbol("if"), Pair(test,Pair(dit, Nil))) ->
  If(tag_parse  test, tag_parse dit, Const(Void))
 | Pair(Symbol("quote"), Pair(x, Nil)) -> Const(Sexpr(x)) 
-| Symbol(x) ->  if(isReserved(x) = false) then let () = printf("here") in Var(x) else raise X_syntax_error
+| Pair(closure, args_list)-> Applic((tag_parse closure), (pair_to_list tag_parse args_list))
+| Symbol(x) ->  if(isReserved(x) = false) then Var(x)  else raise X_excp
 | TagRef(x) -> Const(Sexpr(TagRef(x)))
 | TaggedSexpr (st, Pair (Symbol "quote", Pair (x, Nil))) -> Const(Sexpr(TaggedSexpr(st, x)))
 | TaggedSexpr (st,x) -> Const(Sexpr(TaggedSexpr(st, x)))
-
-(*unquoted sexspr *)
 | Number(x) -> Const(Sexpr(Number(x)))
 | Bool(x) -> Const(Sexpr(Bool(x)))
 | Char(x) -> Const(Sexpr(Char(x)))
