@@ -94,7 +94,9 @@ let rec tag_parse sexpr = match sexpr with
 | Pair(Symbol("let"), Pair(Pair(rib, ribs), Pair(body, Nil))) ->  *)
 (*to check*)
 
-| Pair(Symbol("begin"), Nil) -> Const(Void)
+| Pair(Symbol("begin"), Nil) -> Const(Void) 
+| Pair(Symbol("begin"), Pair(sexp, Nil)) -> tag_parse sexp 
+| Pair(Symbol("begin"), list_of_exp) -> Seq(pair_to_list tag_parse list_of_exp)
 | Pair(Symbol("or") , list_of_params) -> let exp_list = pair_to_list tag_parse list_of_params in Or(exp_list)
 | Pair(Symbol("set!"), Pair(id, Pair (value,Nil))) -> Set((tag_parse id),(tag_parse value))
 | Pair(Symbol("define"), Pair(nameVar , Pair(exp , Nil))) -> Def(tag_parse nameVar, tag_parse exp)
