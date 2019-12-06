@@ -118,7 +118,16 @@ let macro_expansion_let sexpr_let = match sexpr_let with
 | Pair(Symbol("let"), Pair(ribs, Pair(body, Nil))) -> Pair(Pair(Symbol("lambda"), Pair(get_params ribs, Pair(body, Nil))), get_values ribs)
 |_-> raise X_syntax_error;;
 
+let macro_expansion_let_star sexpr = match sexpr with 
+|Pair(Symbol("let*"), Pair(Nil, Pair(body, Nil))) -> Pair(Symbol("let"), Pair(Nil, Pair(body, Nil)))
+|Pair(Symbol("let*"), Pair(Pair(rib, Nil), Pair(body, Nil))) -> 
+Pair(Symbol("let"), Pair(Pair(rib, Nil), Pair(body, Nil))) 
+|Pair(Symbol("let*"), Pair(Pair(rib, rest_ribs), Pair(body, Nil))) -> 
+Pair(Symbol("let"), Pair(Pair(rib, Nil), Pair(Pair(Symbol("let*"), Pair(rest_ribs, Pair(body, Nil))), Nil))) 
+|_-> raise X_syntax_error;;
+
 let rec tag_parse sexpr = match sexpr with 
+| Pair(Symbol("let*"), _) -> tag_parse (macro_expansion_let_star sexpr)
 | Pair(Symbol("let"), Pair(Nil, Pair(body, Nil))) -> tag_parse (macro_expansion_let sexpr)
 | Pair(Symbol("let"), Pair(Pair(rib, ribs), Pair(body, Nil))) ->  tag_parse (macro_expansion_let sexpr)
 | Pair(Symbol("cond"), ribs) -> tag_parse (macro_expansion_cond ribs)
