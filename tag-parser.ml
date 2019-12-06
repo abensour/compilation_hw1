@@ -64,20 +64,19 @@ let reserved_word_list =
 
 (* work on the tag parser starts here *)
 let isReserved str = List.fold_right (fun curr acc-> if(curr = str) then true else acc) reserved_word_list false;;
-(*pair to proper list*)
+
 let rec pair_to_list f pair= match pair with
 |Nil -> []
-|Pair(x, Nil) -> [f x]
-|Pair(x, rest) -> (f x) :: (pair_to_list f rest)
+|Pair(x, Nil) -> [f x] (*proper list last elemnt*)
+|Pair(x, Pair(y,rest)) -> (f x) :: (pair_to_list f (Pair(y, rest)))
+|Pair(x, something) -> [f x] (*improper list last element, dont take the last element*)      
 |_ -> raise X_syntax_error;;
 
 let rec getOptinal pair = match pair with
+|Nil -> ""          (*no parameters*)
 |Pair(x, Nil) -> ""
-|Pair(x, y) -> 
-match y with
-  |Pair(_,_) -> getOptinal(y)
-  |Symbol(sym) -> sym 
-  |_ -> raise X_syntax_error
+|Pair(x, Symbol(sym)) -> sym (*has optional parameter- improper list*)
+|Pair(x, Pair(y, rest)) -> getOptinal(Pair(y, rest))
 |_-> raise X_syntax_error;;
 
 let pull_string pair = pair_to_list 
@@ -89,12 +88,41 @@ let rec tag_pars sexpr = match sexpr with
 | Pair(Symbol("lambda"), Pair(list_of_param, Pair(body, Nil)))-> body
 |_-> raise X_syntax_error;;
 
-let rec tag_parse sexpr = match sexpr with 
-(*| Pair(Symbol("let"), Pair(Nil, Pair(body, Nil))) -> 
-| Pair(Symbol("let"), Pair(Pair(rib, ribs), Pair(body, Nil))) ->  *)
-(*to check*)
+let macro_expansion_cond_rib rib cont = match rib with
+|Pair(expr, Pair(Symbol("=>"), Pair(expf, Nil)))-> Pair(Symbol("let"),
+Pair(Pair(Pair(Symbol("value"), Pair(expr, Nil)), Pair(Pair(Symbol("f"), Pair(Pair(Symbol("lambda"), Pair(Nil, Pair(expf, Nil))), Nil)), Nil)), 
+Pair(Pair(Symbol("if"), Pair(Symbol("value"), Pair(Pair(Pair(Symbol("f"), Nil), Pair(Symbol("value"), Nil)), cont))), Nil)))
+|Pair(Symbol("else"), seq) -> Pair(Symbol("begin"), seq)
+|Pair(test, dit) -> Pair(Symbol("if"), Pair(test, Pair(Pair(Symbol("begin"),dit), cont))) 
+|_-> rib ;; (*implicit else*)
 
-| Pair(Symbol("begin"), Nil) -> Const(Void) 
+let rec macro_expansion_cond ribs = match ribs with 
+|Pair(rib, Nil) -> Pair(macro_expansion_cond_rib rib Nil, Nil)
+|Pair(rib, restRibs)-> let rest_ribs_expander = macro_expansion_cond restRibs in
+ macro_expansion_cond_rib rib rest_ribs_expander
+ |_-> raise X_syntax_error;; 
+
+
+let rec get_params ribs = match ribs with 
+|Pair( Pair(param, Pair(value, Nil)), Nil) -> Pair(param, Nil)    (*last rib*)
+|Pair( Pair(param, Pair(value, Nil)), ribs)-> Pair(param, get_params ribs)
+|_-> raise X_syntax_error ;; 
+
+let rec get_values ribs = match ribs with 
+|Pair( Pair(param, Pair(value, Nil)), Nil) -> Pair(value, Nil)    (*last rib*)
+|Pair( Pair(param, Pair(value, Nil)), ribs)-> Pair(value, get_values ribs)
+|_-> raise X_syntax_error ;; 
+
+let macro_expansion_let sexpr_let = match sexpr_let with 
+| Pair(Symbol("let"), Pair(Nil, Pair(body, Nil))) -> Pair(Pair(Symbol("lambda"), Pair(Nil , Pair(body, Nil))), Nil)
+| Pair(Symbol("let"), Pair(ribs, Pair(body, Nil))) -> Pair(Pair(Symbol("lambda"), Pair(get_params ribs, Pair(body, Nil))), get_values ribs)
+|_-> raise X_syntax_error;;
+
+let rec tag_parse sexpr = match sexpr with 
+| Pair(Symbol("let"), Pair(Nil, Pair(body, Nil))) -> tag_parse (macro_expansion_let sexpr)
+| Pair(Symbol("let"), Pair(Pair(rib, ribs), Pair(body, Nil))) ->  tag_parse (macro_expansion_let sexpr)
+| Pair(Symbol("cond"), ribs) -> tag_parse (macro_expansion_cond ribs)
+| Pair(Symbol("begin"), Nil) -> Const(Void)
 | Pair(Symbol("begin"), Pair(sexp, Nil)) -> tag_parse sexp 
 | Pair(Symbol("begin"), list_of_exp) -> Seq(pair_to_list tag_parse list_of_exp)
 | Pair(Symbol("or") , list_of_params) -> let exp_list = pair_to_list tag_parse list_of_params in Or(exp_list)
@@ -102,17 +130,17 @@ let rec tag_parse sexpr = match sexpr with
 | Pair(Symbol("define"), Pair(nameVar , Pair(exp , Nil))) -> Def(tag_parse nameVar, tag_parse exp)
 | Pair(Symbol("lambda"), Pair(Symbol(sym), Pair(body, Nil)))-> LambdaOpt([],sym, tag_parse body)
 | Pair(Symbol("lambda"), Pair(list_of_param, Pair(body, Nil)))-> 
-  let optional = getOptinal list_of_param in 
+  let optional = getOptinal list_of_param in let () = printf("%s here") optional in 
   if(optional = "") then LambdaSimple(pull_string list_of_param , tag_parse body)
   else LambdaOpt(pull_string list_of_param, optional, tag_parse body)
 (*to check*)
 | Pair(Symbol("if"), Pair(test, Pair(dit, Pair(dif, Nil)))) ->
  If(tag_parse  test, tag_parse dit, tag_parse dif)
-| Pair(Symbol("if"), Pair(test,Pair(dit, Nil))) ->
+| Pair(Symbol("if"), Pair(test,Pair(dit, Nil))) -> let () = printf("if is god") in 
  If(tag_parse  test, tag_parse dit, Const(Void))
 | Pair(Symbol("quote"), Pair(x, Nil)) -> Const(Sexpr(x)) 
 | Pair(closure, args_list)-> Applic((tag_parse closure), (pair_to_list tag_parse args_list))
-| Symbol(x) ->  if(isReserved(x) = false) then Var(x)  else raise X_excp
+| Symbol(x) ->  if(isReserved(x) = false) then Var(x)  else let () = printf("%s no") x in raise X_excp
 | TagRef(x) -> Const(Sexpr(TagRef(x)))
 | TaggedSexpr (st, Pair (Symbol "quote", Pair (x, Nil))) -> Const(Sexpr(TaggedSexpr(st, x)))
 | TaggedSexpr (st,x) -> Const(Sexpr(TaggedSexpr(st, x)))
@@ -120,7 +148,7 @@ let rec tag_parse sexpr = match sexpr with
 | Bool(x) -> Const(Sexpr(Bool(x)))
 | Char(x) -> Const(Sexpr(Char(x)))
 | String(x) -> Const(Sexpr(String(x)))
-|_-> raise X_syntax_error;;
+|_-> raise X_excp;;
 
 let tag_parse_expression sexpr = tag_parse sexpr;;
 
@@ -129,11 +157,3 @@ let tag_parse_expressions sexpr = raise X_not_yet_implemented;;
 
   
 end;; (* struct Tag_Parser *)
-(*
-Pair (Symbol "lambda",
- Pair
-  (Pair (Symbol "x",
-    Pair (Pair (Symbol "unquote", Pair (Symbol "y", Nil)), Nil)),
-  Pair (Pair (Symbol "+", Pair (Symbol "x", Pair (Symbol "y", Nil))), Nil)))*)
-
- 
