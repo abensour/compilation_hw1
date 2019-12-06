@@ -97,9 +97,9 @@ Pair(Pair(Symbol("if"), Pair(Symbol("value"), Pair(Pair(Pair(Symbol("f"), Nil), 
 |_-> rib ;; (*implicit else*)
 
 let rec macro_expansion_cond ribs = match ribs with 
-|Pair(rib, Nil) -> Pair(macro_expansion_cond_rib rib Nil, Nil)
+|Pair(rib, Nil) -> macro_expansion_cond_rib rib Nil
 |Pair(rib, restRibs)-> let rest_ribs_expander = macro_expansion_cond restRibs in
- macro_expansion_cond_rib rib rest_ribs_expander
+ macro_expansion_cond_rib rib (Pair (rest_ribs_expander, Nil)) (*the last thing in the specific if*)
  |_-> raise X_syntax_error;; 
 
 
