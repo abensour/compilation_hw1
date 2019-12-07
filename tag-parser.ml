@@ -1,7 +1,8 @@
 #use "reader.ml";;
 open Reader;;
 (*#use "tag-parser.ml";;
-open Tag_Parser;;*)
+open Tag_Parser;;
+tag_pars (read_sexpr "(letrec ((a 1) (b 2) (c 3)) a)");;*)
 type constant =
   | Sexpr of sexpr
   | Void
@@ -72,6 +73,18 @@ let rec pair_to_list f pair= match pair with
 |Pair(x, something) -> [f x] (*improper list last element, dont take the last element*)      
 |_ -> raise X_syntax_error;;
 
+let rec pair_to_pair f pair = match pair with
+|Nil -> Nil
+|Pair(x, Nil) -> Pair((f x),Nil)
+|Pair(x,rest) -> Pair((f x),(pair_to_pair f rest))
+|_ ->raise X_syntax_error;;
+
+let rec pair_concate pairs add = match pairs with
+|Nil -> add
+|Pair(x, Nil) -> Pair(x,Pair (add , Nil))
+|Pair(x,rest) -> Pair(x,(pair_concate rest add))
+|_ ->raise X_syntax_error;;
+
 let rec getOptinal pair = match pair with
 |Nil -> ""          (*no parameters*)
 |Pair(x, Nil) -> ""
@@ -84,20 +97,16 @@ let pull_string pair = pair_to_list
 |Symbol(x)-> x
 |_ -> raise X_syntax_error) pair;;
 
-let rec tag_pars sexpr = match sexpr with
-| Pair(Symbol("lambda"), Pair(list_of_param, Pair(body, Nil)))-> body
-|_-> raise X_syntax_error;;
-
-(*et expendQuasy sexpr = match sexpr with 
+let rec expendQuasy sexpr = match sexpr with 
 |Pair(Symbol("unquote"), Pair (exp1, Nil)) -> exp1
 |Pair(Symbol("unquote-splicing"), Pair (exp1, Nil)) -> raise X_syntax_error
 |Symbol(str) -> Pair(Symbol("quote"), Pair(Symbol(str), Nil))
 |Nil ->Pair (Symbol("quote"),Pair (Nil, Nil))
-|Pair(Pair(Symbol("unquote-splicing"), Pair (exp1, Nil)),b) -> ((append ⟨sexpr⟩ 􏰀B􏰁)) exp1
-|Pair(a,Pair(Symbol("unquote-splicing"), Pair (exp1, Nil))) -> Pair((expendQuasy a),exp1)
-|Pair(a,b)-> Pair((expendQuasy a),(expendQuasy b))
+|Pair(Pair(Symbol("unquote-splicing"), Pair (exp1, Nil)),b) -> Pair(Symbol("appand"),Pair(exp1,Pair((expendQuasy b),Nil)))
+|Pair(a,Pair(Symbol("unquote-splicing"), Pair (exp1, Nil))) -> Pair(Symbol("cons"),Pair((expendQuasy a),Pair(exp1,Nil)))
+|Pair(a,b)-> Pair(Symbol("cons"),Pair((expendQuasy a),Pair((expendQuasy b),Nil)))
 |_ -> raise X_syntax_error;;
-*)
+
 let macro_expansion_and sexp = match sexp with 
 |Nil -> Bool(true)
 |Pair(expr,Nil) -> expr
@@ -141,12 +150,28 @@ Pair(Symbol("let"), Pair(Pair(rib, Nil), Pair(body, Nil)))
 Pair(Symbol("let"), Pair(Pair(rib, Nil), Pair(Pair(Symbol("let*"), Pair(rest_ribs, Pair(body, Nil))), Nil))) 
 |_-> raise X_syntax_error;;
 
+let rib_expand rib = match rib with 
+|Pair(name,Pair(_,Nil)) -> Pair(name,Pair(Pair (Symbol("quote"), Pair(Symbol("whatever"), Nil)),Nil))
+|_ -> raise X_syntax_error;;
+
+let set_rib_expend rib = match rib with 
+|Pair(name,Pair(func,Nil)) -> Pair (Symbol ("set!"), Pair (name, Pair (func, Nil)))
+|_ -> raise X_syntax_error;;
+
+
+let macro_expansion_letrec sexpr = match sexpr with 
+|Pair(Symbol("letrec"),Pair(ribs, Pair(body, Nil))) -> let ribsLet = pair_to_pair rib_expand ribs
+ in let ribsSet = pair_to_pair set_rib_expend ribs in
+ Pair (Symbol("let"),Pair(ribsLet,Pair((pair_concate ribsSet body),Nil)))
+|_ -> raise X_syntax_error;;
+
 let rec tag_parse sexpr = match sexpr with 
-(*|Pair (Symbol("quasiquote"),Pair(sexp,Nil)) -> tag_parse (expendQuasy sexp)*)
+(*| Pair(Symbol("quasiquote"),Pair(sexp,Nil)) -> expendQuasy sexp*)
 | Pair(Symbol("and"),sexp) -> tag_parse (macro_expansion_and sexp)
 | Pair(Symbol("let*"), _) -> tag_parse (macro_expansion_let_star sexpr)
 | Pair(Symbol("let"), Pair(Nil, Pair(body, Nil))) -> tag_parse (macro_expansion_let sexpr)
 | Pair(Symbol("let"), Pair(Pair(rib, ribs), Pair(body, Nil))) ->  tag_parse (macro_expansion_let sexpr)
+| Pair(Symbol("letrec"),Pair(ribs, Pair(body, Nil))) -> tag_parse (macro_expansion_letrec sexpr)
 | Pair(Symbol("cond"), ribs) -> tag_parse (macro_expansion_cond ribs)
 | Pair(Symbol("begin"), Nil) -> Const(Void)
 | Pair(Symbol("begin"), Pair(sexp, Nil)) -> tag_parse sexp 
@@ -175,6 +200,10 @@ let rec tag_parse sexpr = match sexpr with
 | Char(x) -> Const(Sexpr(Char(x)))
 | String(x) -> Const(Sexpr(String(x)))
 |_-> raise X_excp;;
+
+let rec tag_pars sexpr = match sexpr with
+|Pair(Symbol("letrec"),Pair(ribs, Pair(body, Nil)))-> macro_expansion_letrec sexpr
+|_-> raise X_syntax_error;;
 
 let tag_parse_expression sexpr = tag_parse sexpr;;
 
