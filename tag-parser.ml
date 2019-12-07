@@ -88,6 +88,21 @@ let rec tag_pars sexpr = match sexpr with
 | Pair(Symbol("lambda"), Pair(list_of_param, Pair(body, Nil)))-> body
 |_-> raise X_syntax_error;;
 
+(*et expendQuasy sexpr = match sexpr with 
+|Pair(Symbol("unquote"), Pair (exp1, Nil)) -> exp1
+|Pair(Symbol("unquote-splicing"), Pair (exp1, Nil)) -> raise X_syntax_error
+|Symbol(str) -> Pair(Symbol("quote"), Pair(Symbol(str), Nil))
+|Nil ->Pair (Symbol("quote"),Pair (Nil, Nil))
+|Pair(Pair(Symbol("unquote-splicing"), Pair (exp1, Nil)),b) -> ((append ⟨sexpr⟩ 􏰀B􏰁)) exp1
+|Pair(a,Pair(Symbol("unquote-splicing"), Pair (exp1, Nil))) -> Pair((expendQuasy a),exp1)
+|Pair(a,b)-> Pair((expendQuasy a),(expendQuasy b))
+|_ -> raise X_syntax_error;;
+*)
+let macro_expansion_and sexp = match sexp with 
+|Nil -> Bool(true)
+|Pair(expr,Nil) -> expr
+|Pair(expr,rest) ->  Pair(Symbol("if"), Pair(expr, Pair(Pair (Symbol("and"),rest), Pair(Bool(false), Nil)))) 
+|_ ->raise X_syntax_error;;
 let macro_expansion_cond_rib rib cont = match rib with
 |Pair(expr, Pair(Symbol("=>"), Pair(expf, Nil)))-> Pair(Symbol("let"),
 Pair(Pair(Pair(Symbol("value"), Pair(expr, Nil)), Pair(Pair(Symbol("f"), Pair(Pair(Symbol("lambda"), Pair(Nil, Pair(expf, Nil))), Nil)), Nil)), 
@@ -127,6 +142,8 @@ Pair(Symbol("let"), Pair(Pair(rib, Nil), Pair(Pair(Symbol("let*"), Pair(rest_rib
 |_-> raise X_syntax_error;;
 
 let rec tag_parse sexpr = match sexpr with 
+(*|Pair (Symbol("quasiquote"),Pair(sexp,Nil)) -> tag_parse (expendQuasy sexp)*)
+| Pair(Symbol("and"),sexp) -> tag_parse (macro_expansion_and sexp)
 | Pair(Symbol("let*"), _) -> tag_parse (macro_expansion_let_star sexpr)
 | Pair(Symbol("let"), Pair(Nil, Pair(body, Nil))) -> tag_parse (macro_expansion_let sexpr)
 | Pair(Symbol("let"), Pair(Pair(rib, ribs), Pair(body, Nil))) ->  tag_parse (macro_expansion_let sexpr)
@@ -139,7 +156,7 @@ let rec tag_parse sexpr = match sexpr with
 | Pair(Symbol("define"), Pair(nameVar , Pair(exp , Nil))) -> Def(tag_parse nameVar, tag_parse exp)
 | Pair(Symbol("lambda"), Pair(Symbol(sym), Pair(body, Nil)))-> LambdaOpt([],sym, tag_parse body)
 | Pair(Symbol("lambda"), Pair(list_of_param, Pair(body, Nil)))-> 
-  let optional = getOptinal list_of_param in let () = printf("%s here") optional in 
+  let optional = getOptinal list_of_param in 
   if(optional = "") then LambdaSimple(pull_string list_of_param , tag_parse body)
   else LambdaOpt(pull_string list_of_param, optional, tag_parse body)
 (*to check*)
