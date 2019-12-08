@@ -168,7 +168,7 @@ let macro_expansion_letrec sexpr = match sexpr with
 
 let macro_expansion_MIT_define sexpr = match sexpr with 
 | Pair(Symbol("define"), Pair(Pair(name, args), body)) -> 
-Pair(Symbol("define"), Pair(name, Pair(Pair(Symbol("lambda"), Pair(args, Pair(body, Nil))), Nil)))
+Pair(Symbol("define"), Pair(name, Pair(Pair(Symbol("lambda"), Pair(args, body)), Nil)))
 |_-> raise X_syntax_error;;
 
 
@@ -198,10 +198,10 @@ match sexpr with
 | Pair(Symbol("begin"), list_of_exp) -> Seq(pair_to_list tag_parse list_of_exp)
 | Pair(Symbol("or") , list_of_params) -> let exp_list = pair_to_list tag_parse list_of_params in Or(exp_list)
 | Pair(Symbol("set!"), Pair(id, Pair (value,Nil))) -> Set((tag_parse id),(tag_parse value))
-| Pair(Symbol("define"), Pair(nameVar , Pair(exp , Nil))) -> Def(tag_parse nameVar, tag_parse exp)
-| Pair(Symbol("define"), Pair(Pair(name, args), body)) -> tag_parse (macro_expansion_MIT_define sexpr)
-| Pair(Symbol("lambda"), Pair(Symbol(sym), Pair(body, Nil)))-> LambdaOpt([],sym, tag_parse_body body)
-| Pair(Symbol("lambda"), Pair(list_of_param, Pair(body, Nil)))-> 
+| Pair(Symbol("define"), Pair(Symbol(nameVar) , Pair(exp , Nil))) -> Def(tag_parse (Symbol(nameVar)), tag_parse exp)
+| Pair(Symbol("define"), Pair(Pair(Symbol(name), args), body)) -> tag_parse (macro_expansion_MIT_define sexpr)
+| Pair(Symbol("lambda"), Pair(Symbol(sym), body))-> LambdaOpt([],sym, tag_parse_body body)
+| Pair(Symbol("lambda"), Pair(list_of_param, body))-> 
   let optional = getOptinal list_of_param in 
   if(optional = "") then LambdaSimple(pull_string list_of_param , tag_parse_body body)
   else LambdaOpt(pull_string list_of_param, optional, tag_parse_body body)
