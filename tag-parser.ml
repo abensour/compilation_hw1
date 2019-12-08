@@ -175,9 +175,9 @@ Pair(Symbol("define"), Pair(name, Pair(Pair(Symbol("lambda"), Pair(args, body)),
 let rec tag_parse sexpr =  
 
 let rec get_body_exprs body = match body with 
-|Pair(sexpr, Nil) -> [tag_parse sexpr]
-|Pair(sexpr, rest) -> (tag_parse sexpr) :: (get_body_exprs rest)
-|_-> raise X_syntax_error in
+|Pair(sexpr, Nil) -> [tag_parse sexpr] (*one expr in the body*)
+|Pair(sexpr, rest) -> (tag_parse sexpr) :: (get_body_exprs rest) (*seq*)
+|_-> raise X_syntax_error  in
 
 let tag_parse_body body = 
 let exprs = get_body_exprs body in 
@@ -196,7 +196,7 @@ match sexpr with
 | Pair(Symbol("begin"), Nil) -> Const(Void)
 | Pair(Symbol("begin"), Pair(sexp, Nil)) -> tag_parse sexp 
 | Pair(Symbol("begin"), list_of_exp) -> Seq(pair_to_list tag_parse list_of_exp)
-| Pair(Symbol("or") , list_of_params) -> let exp_list = pair_to_list tag_parse list_of_params in  if (exp_list == []) then Or([Const(Sexpr(Bool(false)))]) else Or(exp_list)
+| Pair(Symbol("or") , list_of_params) -> let exp_list = pair_to_list tag_parse list_of_params in  if (exp_list == []) then Const(Sexpr(Bool(false))) else Or(exp_list)
 | Pair(Symbol("set!"), Pair(id, Pair (value,Nil))) -> Set((tag_parse id),(tag_parse value))
 | Pair(Symbol("define"), Pair(Symbol(nameVar) , Pair(exp , Nil))) -> Def(tag_parse (Symbol(nameVar)), tag_parse exp)
 | Pair(Symbol("define"), Pair(Pair(Symbol(name), args), body)) -> tag_parse (macro_expansion_MIT_define sexpr)
@@ -221,7 +221,7 @@ match sexpr with
 |_-> raise X_excp;;
 
 let rec tag_pars sexpr = match sexpr with
-|Pair(Symbol("letrec"),Pair(ribs, Pair(body, Nil)))-> macro_expansion_letrec sexpr
+| Pair(Symbol("cond"), ribs) -> macro_expansion_cond ribs
 |_-> raise X_syntax_error;;
 
 let tag_parse_expression sexpr = tag_parse sexpr;;
