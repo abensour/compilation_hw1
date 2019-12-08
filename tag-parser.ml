@@ -2,7 +2,7 @@
 open Reader;;
 (*#use "tag-parser.ml";;
 open Tag_Parser;;
-tag_pars (read_sexpr "(letrec ((a 1) (b 2) (c 3)) a)");;*)
+tag_parse (read_sexpr "(letrec ((a 1) (b 2) (c 3)) a)");;*)
 type constant =
   | Sexpr of sexpr
   | Void
@@ -102,10 +102,10 @@ let rec expendQuasy sexpr = match sexpr with
 |Pair(Symbol("unquote-splicing"), Pair (exp1, Nil)) -> raise X_syntax_error
 |Symbol(str) -> Pair(Symbol("quote"), Pair(Symbol(str), Nil))
 |Nil ->Pair (Symbol("quote"),Pair (Nil, Nil))
-|Pair(Pair(Symbol("unquote-splicing"), Pair (exp1, Nil)),b) -> Pair(Symbol("appand"),Pair(exp1,Pair((expendQuasy b),Nil)))
+|Pair(Pair(Symbol("unquote-splicing"), Pair (exp1, Nil)),b) -> Pair(Symbol("append"),Pair(exp1,Pair((expendQuasy b),Nil)))
 |Pair(a,Pair(Symbol("unquote-splicing"), Pair (exp1, Nil))) -> Pair(Symbol("cons"),Pair((expendQuasy a),Pair(exp1,Nil)))
 |Pair(a,b)-> Pair(Symbol("cons"),Pair((expendQuasy a),Pair((expendQuasy b),Nil)))
-|_ -> raise X_syntax_error;;
+|_ -> sexpr;;
 
 let macro_expansion_and sexp = match sexp with 
 |Nil -> Bool(true)
@@ -186,7 +186,7 @@ match exprs with
 |_ -> Seq(exprs) in
 
 match sexpr with
-(*| Pair(Symbol("quasiquote"),Pair(sexp,Nil)) -> expendQuasy sexp*)
+| Pair(Symbol("quasiquote"),Pair(sexp,Nil)) -> tag_parse (expendQuasy sexp)
 | Pair(Symbol("and"),sexp) -> tag_parse (macro_expansion_and sexp)
 | Pair(Symbol("let*"), _) -> tag_parse (macro_expansion_let_star sexpr)
 | Pair(Symbol("let"), Pair(Nil, Pair(body, Nil))) -> tag_parse (macro_expansion_let sexpr)
@@ -196,7 +196,7 @@ match sexpr with
 | Pair(Symbol("begin"), Nil) -> Const(Void)
 | Pair(Symbol("begin"), Pair(sexp, Nil)) -> tag_parse sexp 
 | Pair(Symbol("begin"), list_of_exp) -> Seq(pair_to_list tag_parse list_of_exp)
-| Pair(Symbol("or") , list_of_params) -> let exp_list = pair_to_list tag_parse list_of_params in Or(exp_list)
+| Pair(Symbol("or") , list_of_params) -> let exp_list = pair_to_list tag_parse list_of_params in  if (exp_list == []) then Or([Const(Sexpr(Bool(false)))]) else Or(exp_list)
 | Pair(Symbol("set!"), Pair(id, Pair (value,Nil))) -> Set((tag_parse id),(tag_parse value))
 | Pair(Symbol("define"), Pair(Symbol(nameVar) , Pair(exp , Nil))) -> Def(tag_parse (Symbol(nameVar)), tag_parse exp)
 | Pair(Symbol("define"), Pair(Pair(Symbol(name), args), body)) -> tag_parse (macro_expansion_MIT_define sexpr)
@@ -207,11 +207,10 @@ match sexpr with
   else LambdaOpt(pull_string list_of_param, optional, tag_parse_body body)
 | Pair(Symbol("if"), Pair(test, Pair(dit, Pair(dif, Nil)))) ->
  If(tag_parse  test, tag_parse dit, tag_parse dif)
-| Pair(Symbol("if"), Pair(test,Pair(dit, Nil))) -> let () = printf("if is god") in 
- If(tag_parse  test, tag_parse dit, Const(Void))
+| Pair(Symbol("if"), Pair(test,Pair(dit, Nil))) -> If(tag_parse  test, tag_parse dit, Const(Void))
 | Pair(Symbol("quote"), Pair(x, Nil)) -> Const(Sexpr(x)) 
 | Pair(closure, args_list)-> Applic((tag_parse closure), (pair_to_list tag_parse args_list))
-| Symbol(x) ->  if(isReserved(x) = false) then Var(x)  else let () = printf("%s no") x in raise X_excp
+| Symbol(x) ->  if(isReserved(x) = false) then Var(x)  else raise X_syntax_error
 | TagRef(x) -> Const(Sexpr(TagRef(x)))
 | TaggedSexpr (st, Pair (Symbol "quote", Pair (x, Nil))) -> Const(Sexpr(TaggedSexpr(st, x)))
 | TaggedSexpr (st,x) -> Const(Sexpr(TaggedSexpr(st, x)))
