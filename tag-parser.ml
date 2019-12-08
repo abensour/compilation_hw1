@@ -112,6 +112,7 @@ let macro_expansion_and sexp = match sexp with
 |Pair(expr,Nil) -> expr
 |Pair(expr,rest) ->  Pair(Symbol("if"), Pair(expr, Pair(Pair (Symbol("and"),rest), Pair(Bool(false), Nil)))) 
 |_ ->raise X_syntax_error;;
+
 let macro_expansion_cond_rib rib cont = match rib with
 |Pair(expr, Pair(Symbol("=>"), Pair(expf, Nil)))-> Pair(Symbol("let"),
 Pair(Pair(Pair(Symbol("value"), Pair(expr, Nil)), Pair(Pair(Symbol("f"), Pair(Pair(Symbol("lambda"), Pair(Nil, Pair(expf, Nil))), Nil)), Nil)), 
@@ -165,7 +166,26 @@ let macro_expansion_letrec sexpr = match sexpr with
  Pair (Symbol("let"),Pair(ribsLet,Pair((pair_concate ribsSet body),Nil)))
 |_ -> raise X_syntax_error;;
 
-let rec tag_parse sexpr = match sexpr with 
+let macro_expansion_MIT_define sexpr = match sexpr with 
+| Pair(Symbol("define"), Pair(Pair(name, args), body)) -> 
+Pair(Symbol("define"), Pair(name, Pair(Pair(Symbol("lambda"), Pair(args, Pair(body, Nil))), Nil)))
+|_-> raise X_syntax_error;;
+
+
+let rec tag_parse sexpr =  
+
+let rec get_body_exprs body = match body with 
+|Pair(sexpr, Nil) -> [tag_parse sexpr]
+|Pair(sexpr, rest) -> (tag_parse sexpr) :: (get_body_exprs rest)
+|_-> raise X_syntax_error in
+
+let tag_parse_body body = 
+let exprs = get_body_exprs body in 
+match exprs with 
+|[expr] -> expr 
+|_ -> Seq(exprs) in
+
+match sexpr with
 (*| Pair(Symbol("quasiquote"),Pair(sexp,Nil)) -> expendQuasy sexp*)
 | Pair(Symbol("and"),sexp) -> tag_parse (macro_expansion_and sexp)
 | Pair(Symbol("let*"), _) -> tag_parse (macro_expansion_let_star sexpr)
@@ -179,12 +199,12 @@ let rec tag_parse sexpr = match sexpr with
 | Pair(Symbol("or") , list_of_params) -> let exp_list = pair_to_list tag_parse list_of_params in Or(exp_list)
 | Pair(Symbol("set!"), Pair(id, Pair (value,Nil))) -> Set((tag_parse id),(tag_parse value))
 | Pair(Symbol("define"), Pair(nameVar , Pair(exp , Nil))) -> Def(tag_parse nameVar, tag_parse exp)
-| Pair(Symbol("lambda"), Pair(Symbol(sym), Pair(body, Nil)))-> LambdaOpt([],sym, tag_parse body)
+| Pair(Symbol("define"), Pair(Pair(name, args), body)) -> tag_parse (macro_expansion_MIT_define sexpr)
+| Pair(Symbol("lambda"), Pair(Symbol(sym), Pair(body, Nil)))-> LambdaOpt([],sym, tag_parse_body body)
 | Pair(Symbol("lambda"), Pair(list_of_param, Pair(body, Nil)))-> 
   let optional = getOptinal list_of_param in 
-  if(optional = "") then LambdaSimple(pull_string list_of_param , tag_parse body)
-  else LambdaOpt(pull_string list_of_param, optional, tag_parse body)
-(*to check*)
+  if(optional = "") then LambdaSimple(pull_string list_of_param , tag_parse_body body)
+  else LambdaOpt(pull_string list_of_param, optional, tag_parse_body body)
 | Pair(Symbol("if"), Pair(test, Pair(dit, Pair(dif, Nil)))) ->
  If(tag_parse  test, tag_parse dit, tag_parse dif)
 | Pair(Symbol("if"), Pair(test,Pair(dit, Nil))) -> let () = printf("if is god") in 
