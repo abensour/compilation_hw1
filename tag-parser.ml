@@ -66,6 +66,7 @@ let reserved_word_list =
 (* work on the tag parser starts here *)
 let isReserved str = List.fold_right (fun curr acc-> if(curr = str) then true else acc) reserved_word_list false;;
 
+(*returns list from pair - if its improper doesn't return the last element*)
 let rec pair_to_list f pair= match pair with
 |Nil -> []
 |Pair(x, Nil) -> [f x] (*proper list last elemnt*)
@@ -128,7 +129,6 @@ let macro_expansion_cond_rib rib cont = match rib, cont with
 |Pair(test, dit), _ -> Pair(Symbol("if"), Pair(test, Pair(Pair(Symbol("begin"),dit), cont))) 
 |_, _-> rib ;; (*implicit else*)
 
-
 let rec macro_expansion_cond ribs = match ribs with 
 |Pair(rib, Nil) -> macro_expansion_cond_rib rib Nil
 |Pair(rib, restRibs)-> let rest_ribs_expander = macro_expansion_cond restRibs in
@@ -178,6 +178,16 @@ let macro_expansion_MIT_define sexpr = match sexpr with
 Pair(Symbol("define"), Pair(name, Pair(Pair(Symbol("lambda"), Pair(args, body)), Nil)))
 |_-> raise X_syntax_error;;
 
+let duplicate_arg arg_str args_list = 
+let counter_arg = List.fold_right (fun curr acc -> if(curr = arg_str) then acc+ 1 else acc) args_list 0
+in if(counter_arg > 1) then true else false;; 
+
+let check_if_legal_args list_of_args = 
+let args = pull_string list_of_args in 
+let optional = getOptinal list_of_args in 
+let args = optional :: args in 
+let check = List.fold_right (fun curr acc-> if((isReserved curr) || (duplicate_arg curr args)) then false else acc ) args true 
+in check;; 
 
 let rec tag_parse sexpr =  
 
@@ -209,6 +219,7 @@ match sexpr with
 | Pair(Symbol("define"), Pair(Pair(Symbol(name), args), body)) -> tag_parse (macro_expansion_MIT_define sexpr)
 | Pair(Symbol("lambda"), Pair(Symbol(sym), body))-> LambdaOpt([],sym, tag_parse_body body)
 | Pair(Symbol("lambda"), Pair(list_of_param, body))-> 
+  let check = check_if_legal_args list_of_param in if(check = false) then raise X_syntax_error else
   let optional = getOptinal list_of_param in 
   if(optional = "") then LambdaSimple(pull_string list_of_param , tag_parse_body body)
   else LambdaOpt(pull_string list_of_param, optional, tag_parse_body body)
