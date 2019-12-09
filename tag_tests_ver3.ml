@@ -141,11 +141,11 @@ _assertX 14.1 "(set! define 5)";;
 (*_assertX 14.2 "(set! \"string\" 5)";;*)
 
 
-(*Let*)(*
+(*Let*)
 _assert 15.0 "(let ((v1 b1)(v2 b2)) c1 c2 c3)"
   (Applic (LambdaSimple (["v1"; "v2"], Seq [Var "c1"; Var "c2"; Var "c3"]), [Var "b1"; Var "b2"]));;
 _assert 15.1 "(let () c1 c2)" (Applic (LambdaSimple ([], Seq [Var "c1"; Var "c2"]), []));;
-*)
+
 (*And*)
 _assert 16.0 "(and)" (Const (Sexpr (Bool true)));;
 _assert 16.1 "(and e1)" (Var "e1");;
@@ -178,8 +178,8 @@ _assert 19.0 "(letrec ((f1 e1)(f2 e2)(f3 e3)) body)"
   (_tag_string
      "(let ((f1 'whatever)(f2 'whatever)(f3 'whatever))
 (set! f1 e1) (set! f2 e2) (set! f3 e3)
-(let () body))");;*)
-
+(let () body))");;
+*)
 
     (*
 This output is wrong as the 'body' of the letrec needs to be enclosed in a let expr according to the lectures
@@ -205,8 +205,9 @@ _assert 20.08 "`(,@a ,@b)" (_tag_string "(append a (append b '()))");;
 _assert 20.09 "`(,@a . ,b)" (_tag_string "(append a b)");;
 _assert 20.10 "`(,a . ,@b)" (_tag_string "(cons a b)");;
 _assert 20.11 "`(((,@a)))" (_tag_string "(cons (cons (append a '()) '()) '())");;
-(*_assert 20.12 "`#(a ,b c ,d)" (_tag_string "(vector 'a b 'c d)");;*)
-(*
+(*_assert 20.12 "`#(a ,b c ,d)" (_tag_string "(vector 'a b 'c d)");;
+
+*)(*
 _assert 20.15 "`" (_tag_string "");;
 _assert 20.16 "`" (_tag_string "");;
   _assert 20.17 "`" (_tag_string "");;*)

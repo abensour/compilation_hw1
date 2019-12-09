@@ -81,7 +81,7 @@ let rec pair_to_pair f pair = match pair with
 
 let rec pair_concate pairs add = match pairs with
 |Nil -> add
-|Pair(x, Nil) -> Pair(x,Pair (add , Nil))
+|Pair(x, Nil) -> Pair(x,add)
 |Pair(x,rest) -> Pair(x,(pair_concate rest add))
 |_ ->raise X_syntax_error;;
 
@@ -113,20 +113,27 @@ let macro_expansion_and sexp = match sexp with
 |Pair(expr,rest) ->  Pair(Symbol("if"), Pair(expr, Pair(Pair (Symbol("and"),rest), Pair(Bool(false), Nil)))) 
 |_ ->raise X_syntax_error;;
 
-let macro_expansion_cond_rib rib cont = match rib with
-|Pair(expr, Pair(Symbol("=>"), Pair(expf, Nil)))-> Pair(Symbol("let"),
-Pair(Pair(Pair(Symbol("value"), Pair(expr, Nil)), Pair(Pair(Symbol("f"), Pair(Pair(Symbol("lambda"), Pair(Nil, Pair(expf, Nil))), Nil)), Nil)), 
-Pair(Pair(Symbol("if"), Pair(Symbol("value"), Pair(Pair(Pair(Symbol("f"), Nil), Pair(Symbol("value"), Nil)), cont))), Nil)))
-|Pair(Symbol("else"), seq) -> Pair(Symbol("begin"), seq)
-|Pair(test, dit) -> Pair(Symbol("if"), Pair(test, Pair(Pair(Symbol("begin"),dit), cont))) 
-|_-> rib ;; (*implicit else*)
+let macro_expansion_cond_rib rib cont = match rib, cont with
+|Pair(expr, Pair(Symbol("=>"), Pair(expf, Nil))), Nil-> Pair (Symbol "let",
+ Pair(Pair(Pair(Symbol "value", Pair(expr , Nil)), Pair(Pair (Symbol "f",
+ Pair (Pair (Symbol "lambda", Pair (Nil, Pair (expf, Nil))), Nil)), Nil)), Pair(Pair (Symbol "if",
+ Pair (Symbol "value", Pair (Pair (Pair (Symbol "f", Nil), Pair (Symbol "value", Nil)), cont))),  Nil)))
+|Pair(expr, Pair(Symbol("=>"), Pair(expf, Nil))), _-> Pair (Symbol "let",
+ Pair(Pair(Pair (Symbol "value", Pair (expr, Nil)), Pair (Pair (Symbol "f",
+ Pair (Pair (Symbol "lambda", Pair (Nil, Pair (expf, Nil))), Nil)), Pair (Pair (Symbol "rest",
+ Pair (Pair (Symbol "lambda", Pair (Nil, cont)), Nil)),Nil))),
+ Pair (Pair (Symbol "if", Pair (Symbol "value", Pair (Pair (Pair (Symbol "f", Nil), Pair (Symbol "value", Nil)),
+ Pair (Pair (Symbol "rest", Nil), Nil)))),  Nil)))
+|Pair(Symbol("else"), seq), _ -> Pair(Symbol("begin"), seq)
+|Pair(test, dit), _ -> Pair(Symbol("if"), Pair(test, Pair(Pair(Symbol("begin"),dit), cont))) 
+|_, _-> rib ;; (*implicit else*)
+
 
 let rec macro_expansion_cond ribs = match ribs with 
 |Pair(rib, Nil) -> macro_expansion_cond_rib rib Nil
 |Pair(rib, restRibs)-> let rest_ribs_expander = macro_expansion_cond restRibs in
- macro_expansion_cond_rib rib (Pair (rest_ribs_expander, Nil)) (*the last thing in the specific if*)
+ macro_expansion_cond_rib rib (Pair(rest_ribs_expander, Nil))
  |_-> raise X_syntax_error;; 
-
 
 let rec get_params ribs = match ribs with 
 |Pair( Pair(param, Pair(value, Nil)), Nil) -> Pair(param, Nil)    (*last rib*)
@@ -139,16 +146,16 @@ let rec get_values ribs = match ribs with
 |_-> raise X_syntax_error ;; 
 
 let macro_expansion_let sexpr_let = match sexpr_let with 
-| Pair(Symbol("let"), Pair(Nil, Pair(body, Nil))) -> Pair(Pair(Symbol("lambda"), Pair(Nil , Pair(body, Nil))), Nil)
-| Pair(Symbol("let"), Pair(ribs, Pair(body, Nil))) -> Pair(Pair(Symbol("lambda"), Pair(get_params ribs, Pair(body, Nil))), get_values ribs)
+| Pair(Symbol("let"), Pair(Nil, body)) -> Pair(Pair(Symbol("lambda"), Pair(Nil , body)), Nil)
+| Pair(Symbol("let"), Pair(ribs, body)) -> Pair(Pair(Symbol("lambda"), Pair(get_params ribs,body)), get_values ribs)
 |_-> raise X_syntax_error;;
 
 let macro_expansion_let_star sexpr = match sexpr with 
-|Pair(Symbol("let*"), Pair(Nil, Pair(body, Nil))) -> Pair(Symbol("let"), Pair(Nil, Pair(body, Nil)))
-|Pair(Symbol("let*"), Pair(Pair(rib, Nil), Pair(body, Nil))) -> 
-Pair(Symbol("let"), Pair(Pair(rib, Nil), Pair(body, Nil))) 
-|Pair(Symbol("let*"), Pair(Pair(rib, rest_ribs), Pair(body, Nil))) -> 
-Pair(Symbol("let"), Pair(Pair(rib, Nil), Pair(Pair(Symbol("let*"), Pair(rest_ribs, Pair(body, Nil))), Nil))) 
+|Pair(Symbol("let*"), Pair(Nil, body)) -> Pair(Symbol("let"), Pair(Nil, body))
+|Pair(Symbol("let*"), Pair(Pair(rib, Nil), body)) -> 
+Pair(Symbol("let"), Pair(Pair(rib, Nil), body)) 
+|Pair(Symbol("let*"), Pair(Pair(rib, rest_ribs), body)) -> 
+Pair(Symbol("let"), Pair(Pair(rib, Nil), Pair(Pair(Symbol("let*"), Pair(rest_ribs, body)), Nil))) 
 |_-> raise X_syntax_error;;
 
 let rib_expand rib = match rib with 
@@ -161,9 +168,9 @@ let set_rib_expend rib = match rib with
 
 
 let macro_expansion_letrec sexpr = match sexpr with 
-|Pair(Symbol("letrec"),Pair(ribs, Pair(body, Nil))) -> let ribsLet = pair_to_pair rib_expand ribs
+|Pair(Symbol("letrec"), Pair(ribs, body)) -> let ribsLet = pair_to_pair rib_expand ribs
  in let ribsSet = pair_to_pair set_rib_expend ribs in
- Pair (Symbol("let"),Pair(ribsLet,Pair((pair_concate ribsSet body),Nil)))
+ Pair (Symbol("let"),Pair(ribsLet, Pair((pair_concate ribsSet body),Nil)))
 |_ -> raise X_syntax_error;;
 
 let macro_expansion_MIT_define sexpr = match sexpr with 
@@ -189,9 +196,9 @@ match sexpr with
 | Pair(Symbol("quasiquote"),Pair(sexp,Nil)) -> tag_parse (expendQuasy sexp)
 | Pair(Symbol("and"),sexp) -> tag_parse (macro_expansion_and sexp)
 | Pair(Symbol("let*"), _) -> tag_parse (macro_expansion_let_star sexpr)
-| Pair(Symbol("let"), Pair(Nil, Pair(body, Nil))) -> tag_parse (macro_expansion_let sexpr)
-| Pair(Symbol("let"), Pair(Pair(rib, ribs), Pair(body, Nil))) ->  tag_parse (macro_expansion_let sexpr)
-| Pair(Symbol("letrec"),Pair(ribs, Pair(body, Nil))) -> tag_parse (macro_expansion_letrec sexpr)
+| Pair(Symbol("let"), Pair(Nil, body)) -> tag_parse (macro_expansion_let sexpr)
+| Pair(Symbol("let"), Pair(Pair(rib, ribs), body)) ->  tag_parse (macro_expansion_let sexpr)
+| Pair(Symbol("letrec"),Pair(ribs, body)) -> tag_parse (macro_expansion_letrec sexpr)
 | Pair(Symbol("cond"), ribs) -> tag_parse (macro_expansion_cond ribs)
 | Pair(Symbol("begin"), Nil) -> Const(Void)
 | Pair(Symbol("begin"), Pair(sexp, Nil)) -> tag_parse sexp 
