@@ -2,7 +2,7 @@
 open Reader;;
 (*#use "tag-parser.ml";;
 open Tag_Parser;;
-tag_parse (read_sexpr "(letrec ((a 1) (b 2) (c 3)) a)");;*)
+tag_pars (read_sexpr "(letrec ((a 1) (b 2) (c 3)) a)");;*)
 type constant =
   | Sexpr of sexpr
   | Void
@@ -213,7 +213,8 @@ match sexpr with
 | Pair(Symbol("begin"), Nil) -> Const(Void)
 | Pair(Symbol("begin"), Pair(sexp, Nil)) -> tag_parse sexp 
 | Pair(Symbol("begin"), list_of_exp) -> Seq(pair_to_list tag_parse list_of_exp)
-| Pair(Symbol("or") , list_of_params) -> let exp_list = pair_to_list tag_parse list_of_params in  if (exp_list == []) then Const(Sexpr(Bool(false))) else Or(exp_list)
+| Pair(Symbol("or") , list_of_params) -> let exp_list = pair_to_list tag_parse list_of_params in 
+ if (exp_list == []) then Const(Sexpr(Bool(false))) else if (List.length(exp_list) == 1) then List.hd(exp_list) else Or(exp_list)
 | Pair(Symbol("set!"), Pair(id, Pair (value,Nil))) -> Set((tag_parse id),(tag_parse value))
 | Pair(Symbol("define"), Pair(Symbol(nameVar) , Pair(exp , Nil))) -> Def(tag_parse (Symbol(nameVar)), tag_parse exp)
 | Pair(Symbol("define"), Pair(Pair(Symbol(name), args), body)) -> tag_parse (macro_expansion_MIT_define sexpr)
