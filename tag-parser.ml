@@ -1,8 +1,6 @@
 #use "reader.ml";;
 open Reader;;
-(*#use "tag-parser.ml";;
-open Tag_Parser;;
-tag_pars (read_sexpr "(letrec ((a 1) (b 2) (c 3)) a)");;*)
+
 type constant =
   | Sexpr of sexpr
   | Void
@@ -46,16 +44,13 @@ let rec expr_eq e1 e2 =
 	
                        
 exception X_syntax_error;;
-exception X_excp;;
-(*
+
 module type TAG_PARSER = sig
   val tag_parse_expression : sexpr -> expr
   val tag_parse_expressions : sexpr list -> expr list
 end;; (* signature TAG_PARSER *)
 
 module Tag_Parser : TAG_PARSER = struct
-*)
-module Tag_Parser = struct 
 
 let reserved_word_list =
   ["and"; "begin"; "cond"; "define"; "else";
@@ -216,6 +211,7 @@ match sexpr with
 | Pair(Symbol("or") , list_of_params) -> let exp_list = pair_to_list tag_parse list_of_params in 
  if (exp_list == []) then Const(Sexpr(Bool(false))) else if (List.length(exp_list) == 1) then List.hd(exp_list) else Or(exp_list)
 | Pair(Symbol("set!"), Pair(id, Pair (value,Nil))) -> Set((tag_parse id),(tag_parse value))
+| Pair(Symbol("define"), Pair(Symbol(nameVar), Nil)) -> Def(tag_parse (Symbol(nameVar)), Const(Void))
 | Pair(Symbol("define"), Pair(Symbol(nameVar) , Pair(exp , Nil))) -> Def(tag_parse (Symbol(nameVar)), tag_parse exp)
 | Pair(Symbol("define"), Pair(Pair(Symbol(name), args), body)) -> tag_parse (macro_expansion_MIT_define sexpr)
 | Pair(Symbol("lambda"), Pair(Symbol(sym), body))-> LambdaOpt([],sym, tag_parse_body body)
@@ -237,10 +233,6 @@ match sexpr with
 | Bool(x) -> Const(Sexpr(Bool(x)))
 | Char(x) -> Const(Sexpr(Char(x)))
 | String(x) -> Const(Sexpr(String(x)))
-|_-> raise X_syntax_error;;
-
-let rec tag_pars sexpr = match sexpr with
-| Pair(Symbol("cond"), ribs) -> macro_expansion_cond ribs
 |_-> raise X_syntax_error;;
 
 let tag_parse_expression sexpr = tag_parse sexpr;;
