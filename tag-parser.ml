@@ -237,7 +237,7 @@ match sexpr with
 | Bool(x) -> Const(Sexpr(Bool(x)))
 | Char(x) -> Const(Sexpr(Char(x)))
 | String(x) -> Const(Sexpr(String(x)))
-|_-> raise X_excp;;
+|_-> raise X_syntax_error;;
 
 let rec tag_pars sexpr = match sexpr with
 | Pair(Symbol("cond"), ribs) -> macro_expansion_cond ribs
@@ -246,7 +246,7 @@ let rec tag_pars sexpr = match sexpr with
 let tag_parse_expression sexpr = tag_parse sexpr;;
 
 
-let tag_parse_expressions sexpr = raise X_not_yet_implemented;;
+let tag_parse_expressions sexpr = List.map tag_parse sexpr;;
 
   
 end;; (* struct Tag_Parser *)
