@@ -1,3 +1,4 @@
+
 #use "reader.ml";;
 open Reader;;
 
@@ -165,7 +166,7 @@ let set_rib_expend rib = match rib with
 let macro_expansion_letrec sexpr = match sexpr with 
 |Pair(Symbol("letrec"), Pair(ribs, body)) -> let ribsLet = pair_to_pair rib_expand ribs
  in let ribsSet = pair_to_pair set_rib_expend ribs in
- Pair (Symbol("let"),Pair(ribsLet, Pair((pair_concate ribsSet body),Nil)))
+ Pair (Symbol("let"),Pair(ribsLet, (pair_concate ribsSet body)))
 |_ -> raise X_syntax_error;;
 
 let macro_expansion_MIT_define sexpr = match sexpr with 
@@ -240,5 +241,5 @@ let tag_parse_expression sexpr = tag_parse sexpr;;
 
 let tag_parse_expressions sexpr = List.map tag_parse sexpr;;
 
-  
 end;; (* struct Tag_Parser *)
+
