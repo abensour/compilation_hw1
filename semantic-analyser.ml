@@ -1,4 +1,8 @@
+#use "reader.ml";;
+open Reader;;
+
 #use "tag-parser.ml";;
+open Tag_Parser;;
 
 type var = 
   | VarFree of string
@@ -60,8 +64,37 @@ module type SEMANTICS = sig
 end;;
 
 module Semantics : SEMANTICS = struct
+type pairs = {car : string ;  cdr : int};;
+type bPairs = {name: string ;  depth : int ; indx : int};;
+type pList = { params:  pairs list };;
+type bList = { bounds :  bPairs list };;
+let rec lexicalP (pl:pairs list) (bl:bPairs list) e =
+match e with
+  | Const(const) ->Const'(const)
+  | Var(str) -> let pval = List.find_all (fun (param:pairs) -> param.car = str) pl
+  in if(pval != []) then Var'(VarParam((List.hd pval).car,(List.hd pval).cdr))
+  else let bval = List.fold_left (fun (acc:bPairs) (cur:bPairs) -> if ((cur.name = str) && ((cur.depth < acc.depth) || (acc.depth == -1))) then cur else acc) {name = ""; depth = -1; indx = -1} bl 
+  in if (bval.depth != -1) then Var'(VarBound(bval.name,bval.depth,bval.indx)) else Var'(VarFree(str))
+  | If(test,th,els) -> If'(lexicalP pl bl test ,lexicalP pl bl th,lexicalP pl bl els)
+  | Seq(expL) -> let exp'L = List.map (fun exp1 -> lexicalP pl bl exp1) expL in Seq'(exp'L)
+  | Set (name,value) -> Set'(lexicalP pl bl name,lexicalP pl bl value)
+  | Def (name,value) -> Def'(lexicalP pl bl name,lexicalP pl bl value)
+  | Or(expL) -> let exp'L = List.map (fun exp1 -> lexicalP pl bl exp1) expL in Or'(exp'L)
+  | LambdaSimple(strL,body) -> 
+   let bl1 = List.map (fun (arg:bPairs) ->  {name = arg.name ; depth = (arg.depth + 1) ; indx = arg.indx }) bl (*update depth*)
+   in let ptob = List.map (fun (par:pairs) -> {name = par.car ; depth = 0; indx = par.cdr}) pl (*convert ols params to bounds*) 
+   in let bl2 = bl1 @ ptob (*add old params to bounds list*) in 
+   let (pl1,length) = List.fold_left (fun (nparams,ind) str -> ({car = str ; cdr = ind} :: nparams ,(ind + 1))) ([],0) strL (*add new params*)
+   in LambdaSimple'(strL , (lexicalP pl1 bl2 body)) 
+  | LambdaOpt(strL,optStr,body) ->
+     let bl1 = List.map (fun (arg:bPairs) ->  {name = arg.name ; depth = (arg.depth + 1) ; indx = arg.indx }) bl (*update depth*)
+   in let ptob = List.map (fun (par:pairs) -> {name = par.car ; depth = 0; indx = par.cdr}) pl (*convert ols params to bounds*) 
+   in let bl2 = bl1 @ ptob (*add old params to bounds list*) in 
+    let (pl1,length) = List.fold_left (fun (nparams,ind) str -> ({car = str ; cdr = ind} :: nparams ,(ind + 1))) ([],0) strL (*add new params*)
+   in let pl2 =  {car = optStr ; cdr = length} :: pl1 in LambdaOpt'(strL , optStr, (lexicalP pl2 bl2 body)) 
+  | Applic(proc,args) -> let args' = List.map (fun currExp -> (lexicalP pl bl currExp)) args in let proc' = (lexicalP pl bl proc) in Applic'(proc',args') ;;
 
-let annotate_lexical_addresses e = raise X_not_yet_implemented;;
+let annotate_lexical_addresses e = lexicalP [] [] e;;
 
 let annotate_tail_calls e = raise X_not_yet_implemented;;
 
