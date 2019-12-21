@@ -96,7 +96,40 @@ match e with
 
 let annotate_lexical_addresses e = lexicalP [] [] e;;
 
-let annotate_tail_calls e = raise X_not_yet_implemented;;
+
+
+let rec get_list_without_last list = match list with 
+|[] -> []
+|[last_element] -> []
+|e :: rest -> e :: get_list_without_last rest ;;
+
+let rec annotate_tail_calls_rec e = 
+
+let rec annotate_tail_calls_inside_lambda e = match e with (*body of lambda is a seq or a one exr*)
+  |Seq'(expr_list) -> let list_without_last = get_list_without_last expr_list in  (*seq*)
+  let new_seq = List.map annotate_tail_calls_rec list_without_last in 
+  let last_element = List.nth expr_list (List.length expr_list -1) in 
+  Seq'(List.append new_seq [annotate_tail_calls_inside_lambda last_element])
+  |If'(test, dit, dif) -> If'(test, annotate_tail_calls_inside_lambda dit, annotate_tail_calls_inside_lambda dif) (*one expr*)
+  |Or'(expr_list) ->  let list_without_last = get_list_without_last expr_list in  
+  let new_or = List.map annotate_tail_calls_rec list_without_last in 
+  let last_element = List.nth expr_list (List.length expr_list -1) in 
+  Or'(List.append new_or [annotate_tail_calls_inside_lambda last_element])
+  |Applic'(closure, args) -> ApplicTP'(annotate_tail_calls_rec closure, List.map annotate_tail_calls_rec args)
+  |_ -> annotate_tail_calls_rec e (*set!, LambdaSimple, LambdaOpt*)  in 
+
+match e with
+|If'(test, dit, dif) -> If'(test, annotate_tail_calls_rec dit, annotate_tail_calls_rec dif)
+|Seq'(expr_list)-> Seq'(List.map annotate_tail_calls_rec expr_list)
+|Set'(var, expr') -> Set'(var, annotate_tail_calls_rec expr')
+|Def'(var, expr')-> Def'(var, annotate_tail_calls_rec expr')
+|Or'(expr_list) -> Or'(List.map annotate_tail_calls_rec expr_list)
+|LambdaSimple'(params, body) -> LambdaSimple'(params, annotate_tail_calls_inside_lambda body )(*special*)
+|LambdaOpt'(params, optional, body) -> LambdaOpt'(params, optional, annotate_tail_calls_inside_lambda body) (*special*)
+|Applic'(closure, args) -> Applic'(annotate_tail_calls_rec closure, List.map annotate_tail_calls_rec args) 
+|_ -> e
+
+let annotate_tail_calls e = annotate_tail_calls_rec e;;
 
 let box_set e = raise X_not_yet_implemented;;
 
