@@ -127,11 +127,37 @@ match e with
 |LambdaSimple'(params, body) -> LambdaSimple'(params, annotate_tail_calls_inside_lambda body )(*special*)
 |LambdaOpt'(params, optional, body) -> LambdaOpt'(params, optional, annotate_tail_calls_inside_lambda body) (*special*)
 |Applic'(closure, args) -> Applic'(annotate_tail_calls_rec closure, List.map annotate_tail_calls_rec args) 
-|_ -> e
+|_ -> e;;
 
 let annotate_tail_calls e = annotate_tail_calls_rec e;;
+type read_write = {mutable changed: int list };;
+let read = {changed = []};;
+let write = {changed = []};;
 
-let box_set e = raise X_not_yet_implemented;;
+
+let build_read_write_lists param body i=  match body with 
+  | Var'(VarParam(var_name, _)) -> if(var_name = param) then read.changed <- i :: read.changed 
+  | Var'(VarBound(var_name, _, _)) -> if(var_name = param) then read.changed <- i :: read.changed
+  | If'(test, dit, dif) -> let () = build_read_write_lists param test i in let () = build_read_write_lists param dit i in 
+  let () = build_read_write_lists param dif i   
+  | Seq'(expr_list) -> List.map (fun expr -> build_read_write_lists param expr i) expr_list 
+  | Set'(Var'(VarParam(var_name, _), _)) -> if(var_name = param) then write.changed <- i :: write.changed 
+  | Set'(Var'(VarBound(var_name, _, _))) -> if(var_name = param) then write.changed <- i :: write.changed
+  | Def'(var, expr) -> let () = build_read_write_lists param expr i 
+  | Or'(expr_list ) -> List.map (fun expr -> build_read_write_lists param expr i) expr_list
+  | LambdaSimple'(params, bodyL) -> let exists = List.exists (fun e -> e = param) params in if(! exists) then build_read_write_lists param bodyL (i+1)  
+  | LambdaOpt'(params, optional, bodyL)-> let exists = List.exists (fun e -> e = param) params in if (!exists & optional != param) then build_read_write_lists param bodyL (i+1)
+  | Applic'(closure, args) -> let () = build_read_write_lists param closure i in let () = List.map (fun expr -> build_read_write_lists param expr i) args
+  | ApplicTP'(closure, args) -> let () = build_read_write_lists param closure i in let () = List.map (fun expr -> build_read_write_lists param expr i) args ;;
+  
+  (*| Const'(co)
+  | Box' of var
+  | BoxGet' of var
+  | BoxSet' of var * expr' -> 1*)
+ 
+
+let box_set e = match e with 
+|LambdaSimple(params, body) -> let bool_list = List.map (fun param -> check_if_box_needed2 param body params ;;
 
 let run_semantics expr =
   box_set
