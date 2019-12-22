@@ -157,7 +157,7 @@ let build_read_write_lists param body i=  match body with
  
 
 let box_set e = match e with 
-|LambdaSimple(params, body) -> let bool_list = List.map (fun param -> check_if_box_needed2 param body params ;;
+|LambdaSimple'(params, body) -> let () = List.map (fun param -> build_read_write_lists param body 0) params  ;;
 
 let run_semantics expr =
   box_set
