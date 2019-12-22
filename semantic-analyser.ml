@@ -135,29 +135,65 @@ let read = {changed = []};;
 let write = {changed = []};;
 
 
-let build_read_write_lists param body i=  match body with 
-  | Var'(VarParam(var_name, _)) -> if(var_name = param) then read.changed <- i :: read.changed 
-  | Var'(VarBound(var_name, _, _)) -> if(var_name = param) then read.changed <- i :: read.changed
+let rec build_read_write_lists param body i=  match body with 
+  | Var'(VarParam(var_name, _)) ->  if(var_name = param) then let () = read.changed <- i::read.changed in () 
+  | Var'(VarBound(var_name, _, _)) -> if(var_name = param) then let () = read.changed <- i::read.changed in () 
   | If'(test, dit, dif) -> let () = build_read_write_lists param test i in let () = build_read_write_lists param dit i in 
-  let () = build_read_write_lists param dif i   
-  | Seq'(expr_list) -> List.map (fun expr -> build_read_write_lists param expr i) expr_list 
-  | Set'(Var'(VarParam(var_name, _), _)) -> if(var_name = param) then write.changed <- i :: write.changed 
-  | Set'(Var'(VarBound(var_name, _, _))) -> if(var_name = param) then write.changed <- i :: write.changed
-  | Def'(var, expr) -> let () = build_read_write_lists param expr i 
-  | Or'(expr_list ) -> List.map (fun expr -> build_read_write_lists param expr i) expr_list
-  | LambdaSimple'(params, bodyL) -> let exists = List.exists (fun e -> e = param) params in if(! exists) then build_read_write_lists param bodyL (i+1)  
-  | LambdaOpt'(params, optional, bodyL)-> let exists = List.exists (fun e -> e = param) params in if (!exists & optional != param) then build_read_write_lists param bodyL (i+1)
-  | Applic'(closure, args) -> let () = build_read_write_lists param closure i in let () = List.map (fun expr -> build_read_write_lists param expr i) args
-  | ApplicTP'(closure, args) -> let () = build_read_write_lists param closure i in let () = List.map (fun expr -> build_read_write_lists param expr i) args ;;
-  
-  (*| Const'(co)
-  | Box' of var
-  | BoxGet' of var
-  | BoxSet' of var * expr' -> 1*)
- 
+  let () = build_read_write_lists param dif i in () 
+  | Seq'(expr_list) ->  let l = List.map (fun expr -> build_read_write_lists param expr i) expr_list in () 
+  | Set'(Var'(VarParam(var_name, _)), _) -> if(var_name = param) then let () = write.changed <- i :: write.changed in ()
+  | Set'(Var'(VarBound(var_name, _, _)), _) -> if(var_name = param) then let () = write.changed <- i :: write.changed in ()
+  | Def'(var, expr) -> let () = build_read_write_lists param expr i in ()
+  | Or'(expr_list ) -> let l= List.map (fun expr -> build_read_write_lists param expr i) expr_list in ()
+  | LambdaSimple'(params, bodyL) -> let exists = List.exists (fun e -> e = param) params in if(exists = false) then let () = build_read_write_lists param bodyL (i+1)  in () 
+  | LambdaOpt'(params, optional, bodyL)-> let exists = List.exists (fun e -> e = param) params in if (exists = false && optional != param) then let () = build_read_write_lists param bodyL (i+1) in () 
+  | Applic'(closure, args) -> let () = build_read_write_lists param closure i in  let l = List.map (fun expr -> build_read_write_lists param expr i) args in ()
+  | ApplicTP'(closure, args) -> let () = build_read_write_lists param closure i in  let l = List.map (fun expr -> build_read_write_lists param expr i) args in ()
+  |_ -> ();;
+let check_if_box_needed =
+  List.fold_left (fun acc1 curr1 -> acc1 || (List.fold_left (fun acc2 curr2 -> if (curr1 != curr2) then true else acc2 || false ) false write.changed)) false read.changed;;
 
-let box_set e = match e with 
-|LambdaSimple'(params, body) -> let () = List.map (fun param -> build_read_write_lists param body 0) params  ;;
+let rec update_get_set param body = match body with
+  | Var'(VarParam(var_name, minor)) ->  if(var_name = param) then BoxGet'(VarParam(var_name, minor)) else body 
+  | Var'(VarBound(var_name, major, minor)) -> if(var_name = param) then BoxGet'(VarBound(var_name, major, minor)) else body 
+  | If'(test, dit, dif) ->  If'(update_get_set param test,update_get_set param dit,update_get_set param dif)
+  | Seq'(expr_list) -> Seq'(List.map (fun expr -> update_get_set param expr) expr_list) 
+  | Set'(Var'(v), exp) -> BoxSet'(v, update_get_set param exp) 
+  | Set'(Var'(VarParam(var_name, minor)), expr) -> if(var_name = param) then BoxSet'(VarParam(var_name, minor), update_get_set param expr) else Set'(Var'(VarParam(var_name, minor)), update_get_set param expr)
+  | Set'(Var'(VarBound(var_name, major, minor)), expr) -> if(var_name = param) then BoxSet'(VarBound(var_name, major, minor), update_get_set param expr) else Set'(Var'(VarBound(var_name, major, minor)), update_get_set param expr)
+  | Def'(var, expr) -> Def'(var, update_get_set param expr)
+  | Or'(expr_list ) -> Or'(List.map (fun expr -> update_get_set param expr) expr_list) 
+  | LambdaSimple'(params, bodyL) -> let exists = List.exists (fun e -> e = param) params in if(exists = false) then LambdaSimple'(params, update_get_set param bodyL)  else body
+  | LambdaOpt'(params, optional, bodyL)-> let exists = List.exists (fun e -> e = param) params in if (exists = false && optional != param) then LambdaOpt'(params, optional,  update_get_set param bodyL)  else body
+  | Applic'(closure, args) -> let closureB = update_get_set param closure in let argsB = List.map (fun expr -> update_get_set param expr) args in Applic'(closureB,argsB)
+  | ApplicTP'(closure, args) -> let closureB = update_get_set param closure in let argsB = List.map (fun expr -> update_get_set param expr) args in ApplicTP'(closureB,argsB)
+  |_-> body;;
+
+let update_box param i body = 
+  let bBody = update_get_set param body in 
+  match bBody with 
+  | Seq'(expr_list) -> Seq'(Set'(Var'(VarParam(param,i)), Box'(VarParam(param,i)))::expr_list)
+  |_ -> Seq'([Set'(Var'(VarParam(param,i)) ,Box'(VarParam(param,i)));bBody]);;
+
+let build_box_if_needed param i body = 
+  let () = read.changed <- [] in let () = write.changed <- [] in
+  let () = build_read_write_lists param body 0 in 
+  let is_needed = check_if_box_needed in 
+  if(is_needed) then update_box param i body else body;; 
+
+let rec box_set_rec e = match e with 
+  | If'(test, dit, dif) ->  If'(box_set_rec test,box_set_rec dit, box_set_rec dif)
+  | Seq'(expr_list) -> Seq'(List.map (fun expr -> box_set_rec expr) expr_list) 
+  | Set'(v, exp) -> Set'(v, box_set_rec exp)
+  | Def'(var, expr) -> Def'(var, box_set_rec expr)
+  | Or'(expr_list ) -> Or'(List.map box_set_rec expr_list) 
+  | LambdaSimple'(params, body) -> let (bodyA,indx) = List.fold_left (fun (body,i) param -> ((build_box_if_needed param i body), (i+1))) (body,0) params in LambdaSimple'(params,bodyA)
+  | LambdaOpt'(params, optional, body) ->  let (bodyA,indx) = List.fold_left (fun (body,i) param -> (build_box_if_needed param i body, i+1)) (body,0) (params @ [optional]) in LambdaOpt'(params,optional,bodyA)
+  | Applic'(closure, args) -> let closureB = box_set_rec closure in let argsB = List.map  box_set_rec args in Applic'(closureB,argsB)
+  | ApplicTP'(closure, args) -> let closureB = box_set_rec closure in let argsB = List.map  box_set_rec args in ApplicTP'(closureB,argsB)
+  |_-> e;;
+  
+let box_set e = box_set_rec e;;
 
 let run_semantics expr =
   box_set
