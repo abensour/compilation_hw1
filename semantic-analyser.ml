@@ -138,24 +138,24 @@ let write = {changed = []};;
 let lambda_counter = {index = 0};; 
 
 let rec build_read_write_lists param body i =  match body with 
-  | Var'(VarParam(var_name, _)) ->  if(var_name = param) then let () = printf "here" in let () = read.changed <- {depth = i ; lambda_index = lambda_counter.index }::read.changed in let () = printf "%d" (List.length read.changed) in () 
+  | Var'(VarParam(var_name, _)) ->  if(var_name = param) then let () = read.changed <- {depth = i ; lambda_index = lambda_counter.index }::read.changed  in () 
   | Var'(VarBound(var_name, _, _)) -> if(var_name = param) then let () = read.changed <- {depth = i ; lambda_index = lambda_counter.index}::read.changed in () 
   | If'(test, dit, dif) -> let () = build_read_write_lists param test i in let () = build_read_write_lists param dit i in 
   let () = build_read_write_lists param dif i in () 
   | Seq'(expr_list) ->  let _ = List.map (fun  expr -> build_read_write_lists param expr i ) expr_list in () 
   | Set'(Var'(VarParam(var_name, _)), _) -> if(var_name = param) then  let () = write.changed <- {depth = i ; lambda_index = lambda_counter.index} :: write.changed in ()
-  | Set'(Var'(VarBound(var_name, _, _)), _) -> if(var_name = param) then let () = printf "here set" in let () = write.changed <- {depth = i ; lambda_index = lambda_counter.index} :: write.changed in  let () = printf "%d" (List.length write.changed) in ()
+  | Set'(Var'(VarBound(var_name, _, _)), _) -> if(var_name = param) then  let () = write.changed <- {depth = i ; lambda_index = lambda_counter.index} :: write.changed in  let () = printf "%d" (List.length write.changed) in ()
   | Def'(var, expr) -> let () = build_read_write_lists param expr i in ()
   | Or'(expr_list ) -> let _= List.map (fun  expr -> build_read_write_lists param expr i ) expr_list in ()
-  | LambdaSimple'(params, bodyL) -> let exists = List.exists (fun e -> e = param) params in if(exists = false) then let () = lambda_counter.index <- lambda_counter.index + 1 in  build_read_write_lists param bodyL (i+1) 
-  | LambdaOpt'(params, optional, bodyL)-> let exists = List.exists (fun e -> e = param) params in if (exists = false && optional != param) then let () = lambda_counter.index <- lambda_counter.index + 1 in build_read_write_lists param bodyL (i+1) 
+  | LambdaSimple'(params, bodyL) -> let exists = List.exists (fun e -> e = param) params in if(exists = false) then if(i < 1) then let () = lambda_counter.index <- lambda_counter.index + 1 in  build_read_write_lists param bodyL (i+1) else build_read_write_lists param bodyL i
+  | LambdaOpt'(params, optional, bodyL)-> let exists = List.exists (fun e -> e = param) params in if (exists = false && optional != param) then  if(i < 1) then let () = lambda_counter.index <- lambda_counter.index + 1 in build_read_write_lists param bodyL (i+1) else build_read_write_lists param bodyL i
   | Applic'(closure, args) -> let () = build_read_write_lists param closure i in  let _ = List.map (fun expr ->  build_read_write_lists param expr i ) args in ()
   | ApplicTP'(closure, args) -> let () = build_read_write_lists param closure i in  let _ = List.map (fun expr ->  build_read_write_lists param expr i ) args in ()
   |_ -> ();;
 
 let check_if_box_needed () =
 List.fold_left 
-  (fun acc1 curr1 -> let () = printf "in check" in acc1 || 
+  (fun acc1 curr1 ->  acc1 || 
   (List.fold_left (fun acc2 curr2 ->
    let () = printf "curr1 %d depth1 %d curr2 %d depth2 %d" curr1.lambda_index curr1.depth curr2.lambda_index curr2.depth 
    in if ((curr1.lambda_index != curr2.lambda_index) && (curr1.depth <= 1 || curr2.depth <=1)) then true else acc2 || false ) false write.changed))
@@ -187,7 +187,7 @@ let build_box_if_needed param i body =
   let () = lambda_counter.index <- 0 in 
   let () = build_read_write_lists param body 0 in 
   let is_needed = check_if_box_needed () in 
-  if(is_needed) then let () = printf "true" in update_box param i body else let () = printf "false" in body;; 
+  if(is_needed) then  update_box param i body else  body;; 
 
 let rec box_set_rec e = match e with 
   | If'(test, dit, dif) ->  If'(box_set_rec test,box_set_rec dit, box_set_rec dif)
@@ -209,7 +209,15 @@ let run_semantics expr =
        (annotate_lexical_addresses expr));;
   
 end;; (* struct Semantics *)
-(*tests
-(lambda (x) x (lambda () (set! x 1)))
 
+(*tests
+(lambda (x) x (lambda () (set! x 1))) //need
+(lambda (x) (lambda () x) (lambda () (set! x 1))) //need
+(lambda (x) (lambda () (lambda () x) (lambda () (set! x 1)))) //dont
+(lambda (x) x (set! x 1)) //dont
+(lambda (x) (lambda () x (lambda () (set! x 1)))) //dont
+(lambda (x) (lambda () x) (lambda () (lambda () (set! x 1)))) //need
+(lambda (x) (lambda () (lambda() x)) (lambda () (lambda() (set! x 1))))
+(lambda (y x) (lambda () (lambda() x y)) (lambda () (lambda() (set! x 1)))) //need x not y
+(lambda (y x) (lambda () (lambda() x y)) (lambda () (lambda() (set! x 1) (set! y 1)))) //need x,y
 *)
