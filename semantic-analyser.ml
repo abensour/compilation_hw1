@@ -143,8 +143,8 @@ let rec build_read_write_lists param body i =  match body with
   | If'(test, dit, dif) -> let () = build_read_write_lists param test i in let () = build_read_write_lists param dit i in 
   let () = build_read_write_lists param dif i in () 
   | Seq'(expr_list) ->  let _ = List.map (fun  expr -> build_read_write_lists param expr i ) expr_list in () 
-  | Set'(Var'(VarParam(var_name, _)), _) -> if(var_name = param) then let () = write.changed <- {depth = i ; lambda_index = lambda_counter.index} :: write.changed in ()
-  | Set'(Var'(VarBound(var_name, _, _)), _) -> if(var_name = param) then let () = write.changed <- {depth = i ; lambda_index = lambda_counter.index} :: write.changed in ()
+  | Set'(Var'(VarParam(var_name, _)), _) -> if(var_name = param) then  let () = write.changed <- {depth = i ; lambda_index = lambda_counter.index} :: write.changed in ()
+  | Set'(Var'(VarBound(var_name, _, _)), _) -> if(var_name = param) then let () = printf "here set" in let () = write.changed <- {depth = i ; lambda_index = lambda_counter.index} :: write.changed in  let () = printf "%d" (List.length write.changed) in ()
   | Def'(var, expr) -> let () = build_read_write_lists param expr i in ()
   | Or'(expr_list ) -> let _= List.map (fun  expr -> build_read_write_lists param expr i ) expr_list in ()
   | LambdaSimple'(params, bodyL) -> let exists = List.exists (fun e -> e = param) params in if(exists = false) then let () = lambda_counter.index <- lambda_counter.index + 1 in  build_read_write_lists param bodyL (i+1) 
@@ -153,8 +153,13 @@ let rec build_read_write_lists param body i =  match body with
   | ApplicTP'(closure, args) -> let () = build_read_write_lists param closure i in  let _ = List.map (fun expr ->  build_read_write_lists param expr i ) args in ()
   |_ -> ();;
 
-let check_if_box_needed =
-  List.fold_left (fun acc1 curr1 -> acc1 || (List.fold_left (fun acc2 curr2 -> let () = printf "curr1 %d depth1 %d curr2 %d depth2 %d" curr1.lambda_index curr1.depth curr2.lambda_index curr2.depth in if ((curr1.lambda_index != curr2.lambda_index) && (curr1.depth <= 1 || curr2.depth <=1)) then true else acc2 || false ) false write.changed)) false read.changed;;
+let check_if_box_needed () =
+List.fold_left 
+  (fun acc1 curr1 -> let () = printf "in check" in acc1 || 
+  (List.fold_left (fun acc2 curr2 ->
+   let () = printf "curr1 %d depth1 %d curr2 %d depth2 %d" curr1.lambda_index curr1.depth curr2.lambda_index curr2.depth 
+   in if ((curr1.lambda_index != curr2.lambda_index) && (curr1.depth <= 1 || curr2.depth <=1)) then true else acc2 || false ) false write.changed))
+    false read.changed;;
 
 let rec update_get_set param body = match body with
   | Var'(VarParam(var_name, minor)) ->  if(var_name = param) then BoxGet'(VarParam(var_name, minor)) else body 
@@ -181,7 +186,7 @@ let build_box_if_needed param i body =
   let () = read.changed <- [] in let () = write.changed <- [] in
   let () = lambda_counter.index <- 0 in 
   let () = build_read_write_lists param body 0 in 
-  let is_needed = check_if_box_needed in 
+  let is_needed = check_if_box_needed () in 
   if(is_needed) then let () = printf "true" in update_box param i body else let () = printf "false" in body;; 
 
 let rec box_set_rec e = match e with 
