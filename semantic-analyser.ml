@@ -64,14 +64,14 @@ module type SEMANTICS = sig
 end;;
 
 module Semantics : SEMANTICS = struct
-type pairs = {car : string ;  cdr : int};;
+type pPairs = {car : string ;  cdr : int};;
 type bPairs = {name: string ;  depth : int ; indx : int};;
-type pList = { params:  pairs list };;
+type pList = { params:  pPairs list };;
 type bList = { bounds :  bPairs list };;
-let rec lexicalP (pl:pairs list) (bl:bPairs list) e =
+let rec lexicalP (pl:pPairs list) (bl:bPairs list) e =
 match e with
   | Const(const) ->Const'(const)
-  | Var(str) -> let pval = List.find_all (fun (param:pairs) -> param.car = str) pl
+  | Var(str) -> let pval = List.find_all (fun (param:pPairs) -> param.car = str) pl
   in if(pval != []) then Var'(VarParam((List.hd pval).car,(List.hd pval).cdr))
   else let bval = List.fold_left (fun (acc:bPairs) (cur:bPairs) -> if ((cur.name = str) && ((cur.depth < acc.depth) || (acc.depth == -1))) then cur else acc) {name = ""; depth = -1; indx = -1} bl 
   in if (bval.depth != -1) then Var'(VarBound(bval.name,bval.depth,bval.indx)) else Var'(VarFree(str))
@@ -82,13 +82,13 @@ match e with
   | Or(expL) -> let exp'L = List.map (fun exp1 -> lexicalP pl bl exp1) expL in Or'(exp'L)
   | LambdaSimple(strL,body) -> 
    let bl1 = List.map (fun (arg:bPairs) ->  {name = arg.name ; depth = (arg.depth + 1) ; indx = arg.indx }) bl (*update depth*)
-   in let ptob = List.map (fun (par:pairs) -> {name = par.car ; depth = 0; indx = par.cdr}) pl (*convert ols params to bounds*) 
+   in let ptob = List.map (fun (par:pPairs) -> {name = par.car ; depth = 0; indx = par.cdr}) pl (*convert ols params to bounds*) 
    in let bl2 = bl1 @ ptob (*add old params to bounds list*) in 
    let (pl1,length) = List.fold_left (fun (nparams,ind) str -> ({car = str ; cdr = ind} :: nparams ,(ind + 1))) ([],0) strL (*add new params*)
    in LambdaSimple'(strL , (lexicalP pl1 bl2 body)) 
   | LambdaOpt(strL,optStr,body) ->
      let bl1 = List.map (fun (arg:bPairs) ->  {name = arg.name ; depth = (arg.depth + 1) ; indx = arg.indx }) bl (*update depth*)
-   in let ptob = List.map (fun (par:pairs) -> {name = par.car ; depth = 0; indx = par.cdr}) pl (*convert ols params to bounds*) 
+   in let ptob = List.map (fun (par:pPairs) -> {name = par.car ; depth = 0; indx = par.cdr}) pl (*convert ols params to bounds*) 
    in let bl2 = bl1 @ ptob (*add old params to bounds list*) in 
     let (pl1,length) = List.fold_left (fun (nparams,ind) str -> ({car = str ; cdr = ind} :: nparams ,(ind + 1))) ([],0) strL (*add new params*)
    in let pl2 =  {car = optStr ; cdr = length} :: pl1 in LambdaOpt'(strL , optStr, (lexicalP pl2 bl2 body)) 
@@ -130,35 +130,37 @@ match e with
 |_ -> e;;
 
 let annotate_tail_calls e = annotate_tail_calls_rec e;;
-type read_write = {mutable changed: int list };;
+type mInt = {mutable index : int};;
+type pair = { depth : int ; lambda_index : int};;
+type read_write = {mutable changed: pair list };;
 let read = {changed = []};;
 let write = {changed = []};;
+let lambda_counter = {index = 0};; 
 
-
-let rec build_read_write_lists param body i=  match body with 
-  | Var'(VarParam(var_name, _)) ->  if(var_name = param) then let () = read.changed <- i::read.changed in () 
-  | Var'(VarBound(var_name, _, _)) -> if(var_name = param) then let () = read.changed <- i::read.changed in () 
+let rec build_read_write_lists param body i =  match body with 
+  | Var'(VarParam(var_name, _)) ->  if(var_name = param) then let () = printf "here" in let () = read.changed <- {depth = i ; lambda_index = lambda_counter.index }::read.changed in let () = printf "%d" (List.length read.changed) in () 
+  | Var'(VarBound(var_name, _, _)) -> if(var_name = param) then let () = read.changed <- {depth = i ; lambda_index = lambda_counter.index}::read.changed in () 
   | If'(test, dit, dif) -> let () = build_read_write_lists param test i in let () = build_read_write_lists param dit i in 
   let () = build_read_write_lists param dif i in () 
-  | Seq'(expr_list) ->  let l = List.map (fun expr -> build_read_write_lists param expr i) expr_list in () 
-  | Set'(Var'(VarParam(var_name, _)), _) -> if(var_name = param) then let () = write.changed <- i :: write.changed in ()
-  | Set'(Var'(VarBound(var_name, _, _)), _) -> if(var_name = param) then let () = write.changed <- i :: write.changed in ()
+  | Seq'(expr_list) ->  let _ = List.map (fun  expr -> build_read_write_lists param expr i ) expr_list in () 
+  | Set'(Var'(VarParam(var_name, _)), _) -> if(var_name = param) then let () = write.changed <- {depth = i ; lambda_index = lambda_counter.index} :: write.changed in ()
+  | Set'(Var'(VarBound(var_name, _, _)), _) -> if(var_name = param) then let () = write.changed <- {depth = i ; lambda_index = lambda_counter.index} :: write.changed in ()
   | Def'(var, expr) -> let () = build_read_write_lists param expr i in ()
-  | Or'(expr_list ) -> let l= List.map (fun expr -> build_read_write_lists param expr i) expr_list in ()
-  | LambdaSimple'(params, bodyL) -> let exists = List.exists (fun e -> e = param) params in if(exists = false) then let () = build_read_write_lists param bodyL (i+1)  in () 
-  | LambdaOpt'(params, optional, bodyL)-> let exists = List.exists (fun e -> e = param) params in if (exists = false && optional != param) then let () = build_read_write_lists param bodyL (i+1) in () 
-  | Applic'(closure, args) -> let () = build_read_write_lists param closure i in  let l = List.map (fun expr -> build_read_write_lists param expr i) args in ()
-  | ApplicTP'(closure, args) -> let () = build_read_write_lists param closure i in  let l = List.map (fun expr -> build_read_write_lists param expr i) args in ()
+  | Or'(expr_list ) -> let _= List.map (fun  expr -> build_read_write_lists param expr i ) expr_list in ()
+  | LambdaSimple'(params, bodyL) -> let exists = List.exists (fun e -> e = param) params in if(exists = false) then let () = lambda_counter.index <- lambda_counter.index + 1 in  build_read_write_lists param bodyL (i+1) 
+  | LambdaOpt'(params, optional, bodyL)-> let exists = List.exists (fun e -> e = param) params in if (exists = false && optional != param) then let () = lambda_counter.index <- lambda_counter.index + 1 in build_read_write_lists param bodyL (i+1) 
+  | Applic'(closure, args) -> let () = build_read_write_lists param closure i in  let _ = List.map (fun expr ->  build_read_write_lists param expr i ) args in ()
+  | ApplicTP'(closure, args) -> let () = build_read_write_lists param closure i in  let _ = List.map (fun expr ->  build_read_write_lists param expr i ) args in ()
   |_ -> ();;
+
 let check_if_box_needed =
-  List.fold_left (fun acc1 curr1 -> acc1 || (List.fold_left (fun acc2 curr2 -> if (curr1 != curr2) then true else acc2 || false ) false write.changed)) false read.changed;;
+  List.fold_left (fun acc1 curr1 -> acc1 || (List.fold_left (fun acc2 curr2 -> let () = printf "curr1 %d depth1 %d curr2 %d depth2 %d" curr1.lambda_index curr1.depth curr2.lambda_index curr2.depth in if ((curr1.lambda_index != curr2.lambda_index) && (curr1.depth <= 1 || curr2.depth <=1)) then true else acc2 || false ) false write.changed)) false read.changed;;
 
 let rec update_get_set param body = match body with
   | Var'(VarParam(var_name, minor)) ->  if(var_name = param) then BoxGet'(VarParam(var_name, minor)) else body 
   | Var'(VarBound(var_name, major, minor)) -> if(var_name = param) then BoxGet'(VarBound(var_name, major, minor)) else body 
   | If'(test, dit, dif) ->  If'(update_get_set param test,update_get_set param dit,update_get_set param dif)
   | Seq'(expr_list) -> Seq'(List.map (fun expr -> update_get_set param expr) expr_list) 
-  | Set'(Var'(v), exp) -> BoxSet'(v, update_get_set param exp) 
   | Set'(Var'(VarParam(var_name, minor)), expr) -> if(var_name = param) then BoxSet'(VarParam(var_name, minor), update_get_set param expr) else Set'(Var'(VarParam(var_name, minor)), update_get_set param expr)
   | Set'(Var'(VarBound(var_name, major, minor)), expr) -> if(var_name = param) then BoxSet'(VarBound(var_name, major, minor), update_get_set param expr) else Set'(Var'(VarBound(var_name, major, minor)), update_get_set param expr)
   | Def'(var, expr) -> Def'(var, update_get_set param expr)
@@ -177,9 +179,10 @@ let update_box param i body =
 
 let build_box_if_needed param i body = 
   let () = read.changed <- [] in let () = write.changed <- [] in
+  let () = lambda_counter.index <- 0 in 
   let () = build_read_write_lists param body 0 in 
   let is_needed = check_if_box_needed in 
-  if(is_needed) then update_box param i body else body;; 
+  if(is_needed) then let () = printf "true" in update_box param i body else let () = printf "false" in body;; 
 
 let rec box_set_rec e = match e with 
   | If'(test, dit, dif) ->  If'(box_set_rec test,box_set_rec dit, box_set_rec dif)
@@ -187,8 +190,8 @@ let rec box_set_rec e = match e with
   | Set'(v, exp) -> Set'(v, box_set_rec exp)
   | Def'(var, expr) -> Def'(var, box_set_rec expr)
   | Or'(expr_list ) -> Or'(List.map box_set_rec expr_list) 
-  | LambdaSimple'(params, body) -> let (bodyA,indx) = List.fold_left (fun (body,i) param -> ((build_box_if_needed param i body), (i+1))) (body,0) params in LambdaSimple'(params,bodyA)
-  | LambdaOpt'(params, optional, body) ->  let (bodyA,indx) = List.fold_left (fun (body,i) param -> (build_box_if_needed param i body, i+1)) (body,0) (params @ [optional]) in LambdaOpt'(params,optional,bodyA)
+  | LambdaSimple'(params, body) -> let (bodyA,indx) = List.fold_left (fun (body,i) param -> ((build_box_if_needed param i body), (i+1))) (body,0) params in LambdaSimple'(params,box_set_rec bodyA)
+  | LambdaOpt'(params, optional, body) ->  let (bodyA,indx) = List.fold_left (fun (body,i) param -> (build_box_if_needed param i body, i+1)) (body,0) (params @ [optional]) in LambdaOpt'(params,optional,box_set_rec bodyA)
   | Applic'(closure, args) -> let closureB = box_set_rec closure in let argsB = List.map  box_set_rec args in Applic'(closureB,argsB)
   | ApplicTP'(closure, args) -> let closureB = box_set_rec closure in let argsB = List.map  box_set_rec args in ApplicTP'(closureB,argsB)
   |_-> e;;
@@ -201,3 +204,7 @@ let run_semantics expr =
        (annotate_lexical_addresses expr));;
   
 end;; (* struct Semantics *)
+(*tests
+(lambda (x) x (lambda () (set! x 1)))
+
+*)
