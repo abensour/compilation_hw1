@@ -144,7 +144,7 @@ let rec build_read_write_lists param body i =  match body with
   let () = build_read_write_lists param dif i in () 
   | Seq'(expr_list) ->  let _ = List.map (fun  expr -> build_read_write_lists param expr i ) expr_list in () 
   | Set'(Var'(VarParam(var_name, _)), _) -> if(var_name = param) then  let () = write.changed <- {depth = i ; lambda_index = lambda_counter.index} :: write.changed in ()
-  | Set'(Var'(VarBound(var_name, _, _)), _) -> if(var_name = param) then  let () = write.changed <- {depth = i ; lambda_index = lambda_counter.index} :: write.changed in  let () = printf "%d" (List.length write.changed) in ()
+  | Set'(Var'(VarBound(var_name, _, _)), _) -> if(var_name = param) then  let () = write.changed <- {depth = i ; lambda_index = lambda_counter.index} :: write.changed in ()
   | Def'(var, expr) -> let () = build_read_write_lists param expr i in ()
   | Or'(expr_list ) -> let _= List.map (fun  expr -> build_read_write_lists param expr i ) expr_list in ()
   | LambdaSimple'(params, bodyL) -> let exists = List.exists (fun e -> e = param) params in if(exists = false) then if(i < 1) then let () = lambda_counter.index <- lambda_counter.index + 1 in  build_read_write_lists param bodyL (i+1) else build_read_write_lists param bodyL i
@@ -157,8 +157,7 @@ let check_if_box_needed () =
 List.fold_left 
   (fun acc1 curr1 ->  acc1 || 
   (List.fold_left (fun acc2 curr2 ->
-   let () = printf "curr1 %d depth1 %d curr2 %d depth2 %d" curr1.lambda_index curr1.depth curr2.lambda_index curr2.depth 
-   in if ((curr1.lambda_index != curr2.lambda_index) && (curr1.depth <= 1 || curr2.depth <=1)) then true else acc2 || false ) false write.changed))
+    if ((curr1.lambda_index != curr2.lambda_index) && (curr1.depth <= 1 || curr2.depth <=1)) then true else acc2 || false ) false write.changed))
     false read.changed;;
 
 let rec update_get_set param body = match body with
@@ -178,9 +177,8 @@ let rec update_get_set param body = match body with
 
 let update_box param i body = 
   let bBody = update_get_set param body in 
-  match bBody with 
-  | Seq'(expr_list) -> Seq'(Set'(Var'(VarParam(param,i)), Box'(VarParam(param,i)))::expr_list)
-  |_ -> Seq'([Set'(Var'(VarParam(param,i)) ,Box'(VarParam(param,i)));bBody]);;
+  Seq'([Set'(Var'(VarParam(param,i)), Box'(VarParam(param,i)));bBody]);;
+ 
 
 let build_box_if_needed param i body = 
   let () = read.changed <- [] in let () = write.changed <- [] in
