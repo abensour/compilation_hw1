@@ -232,5 +232,3 @@ end;; (* struct Semantics *)
 (lambda (x y z) (lambda (y) (set! x 5) (+ x y)) (+ x y z)) //need x
 (y (lambda (y) (set! a (lambda (b) (a b))) (set! t (lambda (x) (set! y (lambda (j) (x j x))) h)) (y a))) //need y
 *)
-
-(*let () = printf "read %d %d write %d %d" curr1.depth curr1.lambda_index curr2.depth curr2.lambda_index in*)
