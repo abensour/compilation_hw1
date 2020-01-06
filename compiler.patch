@@ -1,0 +1,921 @@
+diff --git a/reader.ml b/reader.ml
+index c4fd6b2..32d1962 100644
+--- a/reader.ml
++++ b/reader.ml
+@@ -1,9 +1,8 @@
+-
+ #use "pc.ml";;
+-
++open PC;; 
+ exception X_not_yet_implemented;;
+ exception X_this_should_not_happen;;
+-  
++
+ type number =
+   | Int of int
+   | Float of float;;
+@@ -38,6 +37,7 @@ module Reader: sig
+   val read_sexprs : string -> sexpr list
+ end
+ = struct
++
+ let normalize_scheme_symbol str =
+   let s = string_to_list str in
+   if (andmap
+@@ -45,8 +45,247 @@ let normalize_scheme_symbol str =
+ 	s) then str
+   else Printf.sprintf "|%s|" str;;
+ 
+-let read_sexpr string = raise X_not_yet_implemented ;;
++let digit = range '0' '9';;
++let digits = plus digit;;
++let plMin = disj (char '+') (char '-');;
++let abc = (range 'a' 'z') ;;
+ 
+-let read_sexprs string = raise X_not_yet_implemented;;
+-  
+-end;; (* struct Reader *)
++(* Symbol parser *)
++let punctuation = const (fun ch-> ch= '!' || ch= '$' || ch= '^' || ch='*' || ch='-' || ch='_' || ch='='
++|| ch='+' || ch='<' || ch='>' || ch='/' || ch ='?' || ch= ':');;
++let symbolChar = disj_list [range_ci 'a' 'z'; digit ; punctuation];;
++let symbolP = pack (plus symbolChar) (fun e -> let lowercase = List.map lowercase_ascii e in
++Symbol(list_to_string lowercase));;
++
++ (*radix notation parser *)
++let rorR = disj (char 'r') (char 'R') ;;
++let radixStart =  caten (caten (char '#') digits) rorR ;; (* ((('#', ['2'; '4']), 'r'), ['e'; 'f']) *)
++let getNumF base counterP char = 
++let (integer,mult) = counterP in 
++let charFloat =if (char >= 'a' && char <= 'z') then float_of_int((int_of_char char) - 87) else float_of_int((int_of_char char) - 48)
++in if (charFloat >= (float_of_int base)) then raise X_no_match else
++((integer +. (charFloat *. mult)), (mult /. (float_of_int base)));;
++let getNumI base char counterP= 
++let (integer,mult) = counterP in 
++let charFloat =if (char >= 'a' && char <= 'z') then float_of_int((int_of_char char) - 87) else float_of_int((int_of_char char) - 48)
++in if (charFloat >= (float_of_int base)) then raise X_no_match else ((integer +. (charFloat *. mult)), (mult*. (float_of_int base)));;
++let digOLetter = plus (disj digit abc) ;;
++
++
++let radixPs l = let (((e,base),r),bNumber) = radixStart l in 
++let number = List.map lowercase_ascii bNumber in  
++let ibase = int_of_string (list_to_string base) in 
++if ibase > 36 then raise X_no_match
++else if ibase < 2 then raise X_no_match else
++let (sign,num) = 
++match maybe plMin number with
++| (None,e) -> ('+',e)
++| (Some(result),e) -> (result,e) in
++let (intB,floatb) = digOLetter num in (*([1;2;a;z;D;1],[.;d;S]*) 
++let (fnum,length) = List.fold_right (getNumI ibase) intB (0.,1.) in (*fnum is the number ao the integer part*)
++match floatb with
++| [] -> if sign == '+' then (Number(Int (int_of_float fnum)),floatb) else (Number(Int (-1 * (int_of_float fnum))),floatb)
++| chf :: esf ->  (* esf is the continue without the dot *)
++if (chf != '.') then if sign == '+' then (Number(Int (int_of_float fnum)),floatb) else (Number(Int (-1 * (int_of_float fnum))),floatb) 
++else  let (numFloat,rest) = digOLetter esf
++in let (fnumc,lengthc) = List.fold_left (getNumF ibase) (0., 1. /. (float_of_int ibase)) numFloat in (*fnum is the number ao the integer part*)
++if sign == '+' then (Number(Float(fnum +. fnumc)),rest) else (Number(Float(-1. *. (fnum +. fnumc))),rest) 
++let radixP = not_followed_by radixPs symbolChar;;
++(* ['+';'3';'5';'f'] -> (['+'; '3'; '5'], ['f']) *)
++let integerstart l= 
++match maybe plMin l with
++| (None,e) -> digits e
++| (Some(result),e) ->
++let (intg,rest) = digits e in
++((result :: intg) ,rest);;
++
++let integerPs l= 
++let (number,sec) = integerstart l in (* get the number and the continuence *)
++match sec with
++| [] -> (Number(Int(int_of_string (list_to_string number))) ,[])  (*if no continuence than build the number*)
++| ch :: es ->  (* there is some continuation can be symbol/float/exponent *)
++if ((lowercase_ascii ch) == 'e') then
++  let (exponent,rest) = integerstart es in  
++  let fNumber = float_of_string (list_to_string number) in
++  let fExpo = float_of_string (list_to_string exponent) in
++  let fullNum = fNumber *. (10. ** fExpo) in 
++  (Number (Float  fullNum),rest)
++else if ((lowercase_ascii ch) == '.') then raise X_no_match else (Number(Int(int_of_string (list_to_string number))) ,sec);;
++let integerP = not_followed_by integerPs symbolChar;;
++
++let floatPs l= 
++let (number,sec) = integerstart l in (* get the number and the continuence *)
++match sec with
++| [] -> (Number(Int(int_of_string (list_to_string number))),[])
++| chf :: esf ->  (* there is some continuation can be symbol/float *)
++if (chf == '.') then
++  let (decimal,drest) = digits esf in 
++  let fNum =(float_of_string (list_to_string (number @ ['.'] @ decimal))) in
++  match drest with
++  |[] ->  (Number(Float(fNum)),drest)
++  |ch :: es ->  (* there is some continuation can be symbol/float/exponent *)
++  if ((lowercase_ascii ch) == 'e') then
++    let (exponent,rest) = integerstart es in 
++    let fExpo = float_of_string (list_to_string exponent) in
++    let fullNum = fNum *. (10. ** fExpo) in 
++    (Number (Float  fullNum),rest)
++  else (Number(Float(fNum)),drest)
++else raise X_no_match ;;
++let floatP = not_followed_by floatPs symbolChar;;
++
++(*Boolean parser*)
++let nt_true = pack (word_ci "#t") (fun _-> Bool(true));;
++let nt_false = pack (word_ci "#f") (fun _-> Bool(false));;
++let boolP = disj nt_true nt_false ;; 
++
++(*range comibnators *)
++let make_range_char leq ch1 (s : char list) =
++  pack (const (fun ch -> (leq ch1 ch))) (fun (e)-> [e]) s;;
++(*parse all characters that are bigger than ch1*)
++let rangeChar = make_range_char (fun ch1 ch2 -> ch1 < ch2);;
++(*parse all characters that are smaller equal to ch1*)
++let rangeWhitespaces = make_range_char (fun ch1 ch2 -> ch1 >= ch2);;
++
++(* Char parser *)
++let newline = pack (word_ci "newline") (fun l -> ['\n']);; 
++let nul = pack (word_ci "nul") (fun l -> [Char.chr 0]);; 
++let space = pack (word_ci "space") (fun l -> [' ']);;
++let tab = pack (word_ci "tab") (fun l -> ['\t']);;
++let page = pack (word_ci "page") (fun l -> [Char.chr 12]);;
++let return = pack (word_ci "return") (fun l -> ['\r']);;
++
++let visibleSimpleChar = rangeChar  ' ';; (*any char that is bigger than space*)
++
++let namedChar =  disj_list [newline ; nul; space; tab; page;return];;
++
++let charP  =  pack (caten (word "#\\") (disj namedChar visibleSimpleChar))
++(fun (l, ch) ->  match ch with 
++|ch:: [] -> Char(ch)
++|_ -> raise X_no_match) ;;                                         
++
++
++(* String parser *)
++let retS = pack (word "\\r") (fun e -> Char.chr 13) ;;
++let newlineS = pack (word "\\n") (fun e -> Char.chr 10) ;;
++let tabS = pack (word "\\t") (fun e -> Char.chr 9) ;;
++let pageS = pack (word "\\f") (fun e -> Char.chr 12) ;;
++let doubleBack = pack (word "\\\\") (fun e -> Char.chr 92) ;;
++let doubleQuoteInS = pack (word "\\\"") (fun e -> '"');;
++let stringMetaChar = disj_list [doubleQuoteInS; pageS; retS ; newlineS; tabS ; doubleBack];;
++let stringLiteralChar = const (fun ch -> ch != '"' && ch != '\\' );;
++let stringChar = disj stringLiteralChar stringMetaChar ;;
++let doubleQuote = char '"';;
++let stringP  =  let pars = caten (caten doubleQuote (star stringChar)) doubleQuote in 
++pack pars (fun ((l,s),r) -> String(list_to_string(s))) ;;
++
++let unested_sexpr_parser s = 
++disj_list [boolP; charP;  integerP; floatP ; radixP ; stringP; symbolP] s ;; 
++
++let make_paired nt_left nt_right nt =
++let nt = caten nt_left nt in
++let nt = pack nt (function (_, e) -> e) in
++let nt = caten nt nt_right in
++let nt = pack nt (function (e, _) -> e) in
++  nt;;
++
++let nt_whitespaces = star (rangeWhitespaces ' ');;
++
++(*line comments*)
++let any_char_but_semi = const (fun ch -> ch != ';');; 
++let semiP = pack (char ';') (fun e-> [e]);; 
++let any_char_but_newline = const (fun ch -> ch != '\n');; 
++let end_of_line_or_input = disj (nt_end_of_input) (pack (char '\n') (fun e-> [e]));;
++let line_commentsP  = pack (caten (caten semiP (star any_char_but_newline)) end_of_line_or_input)
++(fun ((semi, chars),end_of)-> [' ']) ;; 
++
++(*returns (sexp, rest of list) *)
++let rec nested_sexpr_parser l =
++
++(*sexp comment*)
++let sexpr_commentP  = pack (caten (caten (word "#;") nt_whitespaces) nested_sexpr_parser )
++(fun ((l,whitespaces), sexpr)-> [' ']) in 
++
++(*skip*)
++let whitespace = rangeWhitespaces ' ' in 
++let whitespaces_or_comment = disj_list [line_commentsP; sexpr_commentP; whitespace] in
++let make_comments_or_whitespaces nt = make_paired (star whitespaces_or_comment) (star whitespaces_or_comment) nt in
++
++let tok_lparen =  make_comments_or_whitespaces (char '(') in 
++let tok_rparen = make_comments_or_whitespaces( char ')') in 
++let tok_dot = make_comments_or_whitespaces (char '.') in 
++let clean_word nt = make_comments_or_whitespaces nt in 
++
++(*Quotes*)
++let quotedP = pack (caten (word "'") nested_sexpr_parser) 
++(fun (q, s) -> Pair(Symbol "quote", Pair(s, Nil))) in
++let quasiP = pack (caten (word "`") nested_sexpr_parser) 
++(fun (q, s) -> Pair(Symbol "quasiquote", Pair(s, Nil))) in
++let unquoteSpliceP = pack (caten (word ",@") nested_sexpr_parser) 
++(fun (q, s) -> Pair(Symbol "unquote-splicing", Pair(s, Nil))) in
++let unquotP = pack (caten (word ",") nested_sexpr_parser) 
++(fun (q, s) -> Pair(Symbol "unquote", Pair(s, Nil))) in
++let quote_parser = disj_list [quotedP ; quasiP ; unquoteSpliceP; unquotP] in
++
++(*list*)
++let listP =   pack (caten (caten tok_lparen (star nested_sexpr_parser)) tok_rparen)
++(fun ((lpar, list_of_sexp), rpar) -> List.fold_right (fun curr acc ->  Pair(curr, acc)) list_of_sexp Nil) in
++
++(*Dotted list*)
++let dottedListP = 
++pack (caten (caten (caten (caten tok_lparen (plus nested_sexpr_parser)) tok_dot) nested_sexpr_parser )tok_rparen)
++(fun ((((lpar, list_of_sexp), dot), sp), rpar) -> List.fold_right 
++(fun curr acc ->  Pair(curr, acc)) list_of_sexp sp) in
++
++(*Tag*)
++let tagP = pack (caten (caten (clean_word (word "#{")) symbolP) (clean_word (word "}"))) (fun ((a,sexp),b) -> 
++match sexp with
++|Symbol(str) -> TagRef(str)
++|_ -> raise X_no_match) in
++
++let exprTag =  caten (clean_word (word "=")) nested_sexpr_parser in
++
++let  taggedSexprP = pack (caten tagP (maybe exprTag)) (fun (tag, maybeR) ->
++match tag, maybeR with 
++| TagRef(tag_str), None -> tag 
++| TagRef(tag_str),Some((a, sexp)) -> TaggedSexpr(tag_str, sexp)
++| _, _ -> raise X_no_match) in
++
++
++let list_of_parsers = [unested_sexpr_parser; quote_parser; listP; dottedListP; taggedSexprP] in
++
++ make_comments_or_whitespaces (disj_list list_of_parsers) l ;;
++
++
++(* list of tagged symbols *)
++type mList = { mutable listtags : string list };;
++let tagsList = { listtags = []};;
++
++ let rec checkTaggedRef sexp =  match sexp with 
++ |TaggedSexpr(ref_str, nsexp) -> let is_exist = List.fold_right (fun curr_str acc -> 
++ if(curr_str = ref_str) then true else acc) tagsList.listtags false in 
++ if(is_exist = true) then raise X_this_should_not_happen else let ()= tagsList.listtags <- ref_str :: tagsList.listtags in 
++ TaggedSexpr(ref_str, checkTaggedRef nsexp)
++ |Pair(sexp1, sexp2)-> let sexp1_res = checkTaggedRef sexp1 in let sexp2_res = checkTaggedRef sexp2 in
++ Pair(sexp1_res, sexp2_res)
++ |_-> sexp;; 
++ 
++let nt_sexprs l = let () = tagsList.listtags <-[] in 
++let (sexp, rest) =  nested_sexpr_parser l in (checkTaggedRef sexp, rest);;
++
++(*expect to get only one sexp otherwise raise exception*)
++let read_sexpr string = 
++let list_of_char = string_to_list string in 
++let (sexpr, rest) = nt_sexprs list_of_char in
++match rest with 
++| []-> sexpr
++|_ -> raise X_no_match;;
++
++(*main method gets string returns list of sexps*)
++let read_sexprs string = 
++let list_of_char = string_to_list string in 
++let (sexpr_list, rest) = (star nt_sexprs) list_of_char in 
++match rest with 
++|[] -> sexpr_list
++|_ -> raise X_no_match;;
++ 
++ end;; (* struct Reader *)
+diff --git a/readme.txt b/readme.txt
+index e69de29..10fd594 100644
+--- a/readme.txt
++++ b/readme.txt
+@@ -0,0 +1,9 @@
++Lishay Aben Sour 207912734
++Liad Nahum 318841285
++We assert that the work we submitted is 100% our own. We have not received any
++part from any other student in the class, nor have we give parts of it for use to others.
++Nor have we used code from other sources: Courses taught previously at this university,
++courses taught at other universities, various bits of code found on the Internet, etc.
++We realize that should our code be found to contain code from other sources, that a
++formal case shall be opened against us with va’adat mishma’at, in pursuit of disciplinary
++action.
+\ No newline at end of file
+diff --git a/semantic-analyser.ml b/semantic-analyser.ml
+index 2f5ff59..4535ebf 100644
+--- a/semantic-analyser.ml
++++ b/semantic-analyser.ml
+@@ -1,75 +1,234 @@
+-#use "tag-parser.ml";;
+-
+-type var = 
+-  | VarFree of string
+-  | VarParam of string * int
+-  | VarBound of string * int * int;;
+-
+-type expr' =
+-  | Const' of constant
+-  | Var' of var
+-  | Box' of var
+-  | BoxGet' of var
+-  | BoxSet' of var * expr'
+-  | If' of expr' * expr' * expr'
+-  | Seq' of expr' list
+-  | Set' of expr' * expr'
+-  | Def' of expr' * expr'
+-  | Or' of expr' list
+-  | LambdaSimple' of string list * expr'
+-  | LambdaOpt' of string list * string * expr'
+-  | Applic' of expr' * (expr' list)
+-  | ApplicTP' of expr' * (expr' list);;
+-
+-let rec expr'_eq e1 e2 =
+-  match e1, e2 with
+-  | Const' Void, Const' Void -> true
+-  | Const'(Sexpr s1), Const'(Sexpr s2) -> sexpr_eq s1 s2
+-  | Var'(VarFree v1), Var'(VarFree v2) -> String.equal v1 v2
+-  | Var'(VarParam (v1,mn1)), Var'(VarParam (v2,mn2)) -> String.equal v1 v2 && mn1 = mn2
+-  | Var'(VarBound (v1,mj1,mn1)), Var'(VarBound (v2,mj2,mn2)) -> String.equal v1 v2 && mj1 = mj2  && mn1 = mn2
+-  | If'(t1, th1, el1), If'(t2, th2, el2) -> (expr'_eq t1 t2) &&
+-                                            (expr'_eq th1 th2) &&
+-                                              (expr'_eq el1 el2)
+-  | (Seq'(l1), Seq'(l2)
+-  | Or'(l1), Or'(l2)) -> List.for_all2 expr'_eq l1 l2
+-  | (Set'(var1, val1), Set'(var2, val2)
+-  | Def'(var1, val1), Def'(var2, val2)) -> (expr'_eq var1 var2) &&
+-                                             (expr'_eq val1 val2)
+-  | LambdaSimple'(vars1, body1), LambdaSimple'(vars2, body2) ->
+-     (List.for_all2 String.equal vars1 vars2) &&
+-       (expr'_eq body1 body2)
+-  | LambdaOpt'(vars1, var1, body1), LambdaOpt'(vars2, var2, body2) ->
+-     (String.equal var1 var2) &&
+-       (List.for_all2 String.equal vars1 vars2) &&
+-         (expr'_eq body1 body2)
+-  | Applic'(e1, args1), Applic'(e2, args2)
+-  | ApplicTP'(e1, args1), ApplicTP'(e2, args2) ->
+-	 (expr'_eq e1 e2) &&
+-	   (List.for_all2 expr'_eq args1 args2)
+-  | _ -> false;;
+-	
+-                       
+-exception X_syntax_error;;
+-
+-module type SEMANTICS = sig
+-  val run_semantics : expr -> expr'
+-  val annotate_lexical_addresses : expr -> expr'
+-  val annotate_tail_calls : expr' -> expr'
+-  val box_set : expr' -> expr'
+-end;;
+-
+-module Semantics : SEMANTICS = struct
+-
+-let annotate_lexical_addresses e = raise X_not_yet_implemented;;
+-
+-let annotate_tail_calls e = raise X_not_yet_implemented;;
+-
+-let box_set e = raise X_not_yet_implemented;;
+-
+-let run_semantics expr =
+-  box_set
+-    (annotate_tail_calls
+-       (annotate_lexical_addresses expr));;
+-  
+-end;; (* struct Semantics *)
++#use "reader.ml";;
++open Reader;;
++
++#use "tag-parser.ml";;
++open Tag_Parser;;
++
++type var = 
++  | VarFree of string
++  | VarParam of string * int
++  | VarBound of string * int * int;;
++
++type expr' =
++  | Const' of constant
++  | Var' of var
++  | Box' of var
++  | BoxGet' of var
++  | BoxSet' of var * expr'
++  | If' of expr' * expr' * expr'
++  | Seq' of expr' list
++  | Set' of expr' * expr'
++  | Def' of expr' * expr'
++  | Or' of expr' list
++  | LambdaSimple' of string list * expr'
++  | LambdaOpt' of string list * string * expr'
++  | Applic' of expr' * (expr' list)
++  | ApplicTP' of expr' * (expr' list);;
++
++let rec expr'_eq e1 e2 =
++  match e1, e2 with
++  | Const' Void, Const' Void -> true
++  | Const'(Sexpr s1), Const'(Sexpr s2) -> sexpr_eq s1 s2
++  | Var'(VarFree v1), Var'(VarFree v2) -> String.equal v1 v2
++  | Var'(VarParam (v1,mn1)), Var'(VarParam (v2,mn2)) -> String.equal v1 v2 && mn1 = mn2
++  | Var'(VarBound (v1,mj1,mn1)), Var'(VarBound (v2,mj2,mn2)) -> String.equal v1 v2 && mj1 = mj2  && mn1 = mn2
++  | If'(t1, th1, el1), If'(t2, th2, el2) -> (expr'_eq t1 t2) &&
++                                            (expr'_eq th1 th2) &&
++                                              (expr'_eq el1 el2)
++  | (Seq'(l1), Seq'(l2)
++  | Or'(l1), Or'(l2)) -> List.for_all2 expr'_eq l1 l2
++  | (Set'(var1, val1), Set'(var2, val2)
++  | Def'(var1, val1), Def'(var2, val2)) -> (expr'_eq var1 var2) &&
++                                             (expr'_eq val1 val2)
++  | LambdaSimple'(vars1, body1), LambdaSimple'(vars2, body2) ->
++     (List.for_all2 String.equal vars1 vars2) &&
++       (expr'_eq body1 body2)
++  | LambdaOpt'(vars1, var1, body1), LambdaOpt'(vars2, var2, body2) ->
++     (String.equal var1 var2) &&
++       (List.for_all2 String.equal vars1 vars2) &&
++         (expr'_eq body1 body2)
++  | Applic'(e1, args1), Applic'(e2, args2)
++  | ApplicTP'(e1, args1), ApplicTP'(e2, args2) ->
++	 (expr'_eq e1 e2) &&
++	   (List.for_all2 expr'_eq args1 args2)
++  | _ -> false;;
++	
++                       
++exception X_syntax_error;;
++
++module type SEMANTICS = sig
++  val run_semantics : expr -> expr'
++  val annotate_lexical_addresses : expr -> expr'
++  val annotate_tail_calls : expr' -> expr'
++  val box_set : expr' -> expr'
++end;;
++
++module Semantics : SEMANTICS = struct
++type pPairs = {car : string ;  cdr : int};;
++type bPairs = {name: string ;  depth : int ; indx : int};;
++type pList = { params:  pPairs list };;
++type bList = { bounds :  bPairs list };;
++let rec lexicalP (pl:pPairs list) (bl:bPairs list) e =
++match e with
++  | Const(const) ->Const'(const)
++  | Var(str) -> let pval = List.find_all (fun (param:pPairs) -> param.car = str) pl
++  in if(pval != []) then Var'(VarParam((List.hd pval).car,(List.hd pval).cdr))
++  else let bval = List.fold_left (fun (acc:bPairs) (cur:bPairs) -> if ((cur.name = str) && ((cur.depth < acc.depth) || (acc.depth == -1))) then cur else acc) {name = ""; depth = -1; indx = -1} bl 
++  in if (bval.depth != -1) then Var'(VarBound(bval.name,bval.depth,bval.indx)) else Var'(VarFree(str))
++  | If(test,th,els) -> If'(lexicalP pl bl test ,lexicalP pl bl th,lexicalP pl bl els)
++  | Seq(expL) -> let exp'L = List.map (fun exp1 -> lexicalP pl bl exp1) expL in Seq'(exp'L)
++  | Set (name,value) -> Set'(lexicalP pl bl name,lexicalP pl bl value)
++  | Def (name,value) -> Def'(lexicalP pl bl name,lexicalP pl bl value)
++  | Or(expL) -> let exp'L = List.map (fun exp1 -> lexicalP pl bl exp1) expL in Or'(exp'L)
++  | LambdaSimple(strL,body) -> 
++   let bl1 = List.map (fun (arg:bPairs) ->  {name = arg.name ; depth = (arg.depth + 1) ; indx = arg.indx }) bl (*update depth*)
++   in let ptob = List.map (fun (par:pPairs) -> {name = par.car ; depth = 0; indx = par.cdr}) pl (*convert ols params to bounds*) 
++   in let bl2 = bl1 @ ptob (*add old params to bounds list*) in 
++   let (pl1,length) = List.fold_left (fun (nparams,ind) str -> ({car = str ; cdr = ind} :: nparams ,(ind + 1))) ([],0) strL (*add new params*)
++   in LambdaSimple'(strL , (lexicalP pl1 bl2 body)) 
++  | LambdaOpt(strL,optStr,body) ->
++     let bl1 = List.map (fun (arg:bPairs) ->  {name = arg.name ; depth = (arg.depth + 1) ; indx = arg.indx }) bl (*update depth*)
++   in let ptob = List.map (fun (par:pPairs) -> {name = par.car ; depth = 0; indx = par.cdr}) pl (*convert ols params to bounds*) 
++   in let bl2 = bl1 @ ptob (*add old params to bounds list*) in 
++    let (pl1,length) = List.fold_left (fun (nparams,ind) str -> ({car = str ; cdr = ind} :: nparams ,(ind + 1))) ([],0) strL (*add new params*)
++   in let pl2 =  {car = optStr ; cdr = length} :: pl1 in LambdaOpt'(strL , optStr, (lexicalP pl2 bl2 body)) 
++  | Applic(proc,args) -> let args' = List.map (fun currExp -> (lexicalP pl bl currExp)) args in let proc' = (lexicalP pl bl proc) in Applic'(proc',args') ;;
++
++let annotate_lexical_addresses e = lexicalP [] [] e;;
++
++
++
++let rec get_list_without_last list = match list with 
++|[] -> []
++|[last_element] -> []
++|e :: rest -> e :: get_list_without_last rest ;;
++
++let rec annotate_tail_calls_rec e = 
++
++let rec annotate_tail_calls_inside_lambda e = match e with (*body of lambda is a seq or a one exr*)
++  |Seq'(expr_list) -> let list_without_last = get_list_without_last expr_list in  (*seq*)
++  let new_seq = List.map annotate_tail_calls_rec list_without_last in 
++  let last_element = List.nth expr_list (List.length expr_list -1) in 
++  Seq'(List.append new_seq [annotate_tail_calls_inside_lambda last_element])
++  |If'(test, dit, dif) -> If'(test, annotate_tail_calls_inside_lambda dit, annotate_tail_calls_inside_lambda dif) (*one expr*)
++  |Or'(expr_list) ->  let list_without_last = get_list_without_last expr_list in  
++  let new_or = List.map annotate_tail_calls_rec list_without_last in 
++  let last_element = List.nth expr_list (List.length expr_list -1) in 
++  Or'(List.append new_or [annotate_tail_calls_inside_lambda last_element])
++  |Applic'(closure, args) -> ApplicTP'(annotate_tail_calls_rec closure, List.map annotate_tail_calls_rec args)
++  |_ -> annotate_tail_calls_rec e (*set!, LambdaSimple, LambdaOpt*)  in 
++
++match e with
++|If'(test, dit, dif) -> If'(test, annotate_tail_calls_rec dit, annotate_tail_calls_rec dif)
++|Seq'(expr_list)-> Seq'(List.map annotate_tail_calls_rec expr_list)
++|Set'(var, expr') -> Set'(var, annotate_tail_calls_rec expr')
++|Def'(var, expr')-> Def'(var, annotate_tail_calls_rec expr')
++|Or'(expr_list) -> Or'(List.map annotate_tail_calls_rec expr_list)
++|LambdaSimple'(params, body) -> LambdaSimple'(params, annotate_tail_calls_inside_lambda body )(*special*)
++|LambdaOpt'(params, optional, body) -> LambdaOpt'(params, optional, annotate_tail_calls_inside_lambda body) (*special*)
++|Applic'(closure, args) -> Applic'(annotate_tail_calls_rec closure, List.map annotate_tail_calls_rec args) 
++|_ -> e;;
++
++let annotate_tail_calls e = annotate_tail_calls_rec e;;
++type mInt = {mutable index : int};;
++type pair = { depth : int ; lambda_index : int};;
++type read_write = {mutable changed: pair list };;
++let read = {changed = []};;
++let write = {changed = []};;
++let lambda_counter = {index = 0};; 
++
++let rec build_read_write_lists param body i j=  match body with 
++  | Var'(VarParam(var_name, _)) -> if(var_name = param) then let () = read.changed <- {depth = i ; lambda_index = j }::read.changed  in () 
++  | Var'(VarBound(var_name, _, _)) -> if(var_name = param) then let () = read.changed <- {depth = i ; lambda_index = j}::read.changed in () 
++  | If'(test, dit, dif) -> let () = build_read_write_lists param test i j in let () = build_read_write_lists param dit i j in 
++  let () = build_read_write_lists param dif i j in () 
++  | Seq'(expr_list) ->  let _ = List.map (fun  expr -> build_read_write_lists param expr i j ) expr_list in () 
++  | Set'(Var'(VarFree(_)), exp) -> build_read_write_lists param exp i j
++  | Set'(Var'(VarParam(var_name, _)), exp) -> let _ = if(var_name = param) then  write.changed <- {depth = i ; lambda_index = j} :: write.changed else ()  in build_read_write_lists param exp i j
++  | Set'(Var'(VarBound(var_name, _, _)), exp) ->  let _ = if(var_name = param) then  write.changed <- {depth = i ; lambda_index = j} :: write.changed else () in build_read_write_lists param exp i j
++  | Def'(var, expr) -> let () = build_read_write_lists param expr i j in ()
++  | Or'(expr_list ) -> let _= List.map (fun  expr -> build_read_write_lists param expr i j) expr_list in ()
++  | LambdaSimple'(params, bodyL) -> let exists = List.exists (fun e -> e = param) params in if(exists = false) then if(i < 1) 
++  then let () = lambda_counter.index <- lambda_counter.index + 1 in  build_read_write_lists param bodyL (i+1) lambda_counter.index 
++  else build_read_write_lists param bodyL i lambda_counter.index
++  | LambdaOpt'(params, optional, bodyL)-> let exists = List.exists (fun e -> e = param) params in if (exists = false && optional != param)
++   then  if(i < 1) then let () = lambda_counter.index <- lambda_counter.index + 1 in build_read_write_lists param bodyL (i+1)lambda_counter.index  else build_read_write_lists param bodyL i lambda_counter.index
++  | Applic'(closure, args) -> let () = build_read_write_lists param closure i j in  let _ = List.map (fun expr ->  build_read_write_lists param expr i j ) args in ()
++  | ApplicTP'(closure, args) -> let () = build_read_write_lists param closure i j in  let _ = List.map (fun expr ->  build_read_write_lists param expr i j) args in ()
++  | BoxSet'(var, expr) -> build_read_write_lists param expr i j
++  |_ -> ();;
++
++
++let check_if_box_needed () =
++List.fold_left 
++  (fun acc1 curr1 ->  acc1 || 
++  (List.fold_left (fun acc2 curr2 -> 
++    if ((curr1.lambda_index != curr2.lambda_index) && (curr1.depth <= 1 || curr2.depth <=1)) then true else acc2 || false ) false write.changed))
++    false read.changed;;
++
++let rec update_get_set param body = match body with
++  | Var'(VarParam(var_name, minor)) ->  if(var_name = param) then BoxGet'(VarParam(var_name, minor)) else body 
++  | Var'(VarBound(var_name, major, minor)) -> if(var_name = param) then BoxGet'(VarBound(var_name, major, minor)) else body 
++  | If'(test, dit, dif) ->  If'(update_get_set param test,update_get_set param dit,update_get_set param dif)
++  | Seq'(expr_list) -> Seq'(List.map (fun expr -> update_get_set param expr) expr_list) 
++  | Set'(Var'(VarFree(var_name)), expr) -> Set'(Var'(VarFree(var_name)), update_get_set param expr)
++  | Set'(Var'(VarParam(var_name, minor)), expr) -> if(var_name = param) then BoxSet'(VarParam(var_name, minor), update_get_set param expr) else Set'(Var'(VarParam(var_name, minor)), update_get_set param expr)
++  | Set'(Var'(VarBound(var_name, major, minor)), expr) -> if(var_name = param) then BoxSet'(VarBound(var_name, major, minor), update_get_set param expr) else Set'(Var'(VarBound(var_name, major, minor)), update_get_set param expr)
++  | Def'(var, expr) -> Def'(var, update_get_set param expr)
++  | Or'(expr_list ) -> Or'(List.map (fun expr -> update_get_set param expr) expr_list) 
++  | LambdaSimple'(params, bodyL) -> let exists = List.exists (fun e -> e = param) params in if(exists = false) then LambdaSimple'(params, update_get_set param bodyL)  else body
++  | LambdaOpt'(params, optional, bodyL)-> let exists = List.exists (fun e -> e = param) params in if (exists = false && optional != param) then LambdaOpt'(params, optional,  update_get_set param bodyL)  else body
++  | Applic'(closure, args) -> let closureB = update_get_set param closure in let argsB = List.map (fun expr -> update_get_set param expr) args in Applic'(closureB,argsB)
++  | ApplicTP'(closure, args) -> let closureB = update_get_set param closure in let argsB = List.map (fun expr -> update_get_set param expr) args in ApplicTP'(closureB,argsB)
++  | BoxSet'(var, expr) -> BoxSet'(var, update_get_set param expr)
++  |_-> body;;
++
++let build_box_if_needed param i body = 
++  let () = read.changed <- [] in let () = write.changed <- [] in
++  let () = lambda_counter.index <- 0 in 
++  let () = build_read_write_lists param body 0 lambda_counter.index in 
++  check_if_box_needed () ;;
++
++  (*if(is_needed) then  update_box param i body else  body;; *)
++let get_body_and_setlist body params =  List.fold_left (fun (body, set_list,i) param -> 
++  let is_needed = (build_box_if_needed param i body) in 
++  if(is_needed) then  (update_get_set param body, set_list @ [Set'(Var'(VarParam(param,i)), Box'(VarParam(param,i)))], (i +1))   
++  else  (body, set_list, (i+1))) (body,[],0) params ;; 
++
++let rec box_set_rec e = match e with 
++  | If'(test, dit, dif) ->  If'(box_set_rec test,box_set_rec dit, box_set_rec dif)
++  | Seq'(expr_list) -> Seq'(List.map (fun expr -> box_set_rec expr) expr_list) 
++  | Set'(v, exp) -> Set'(v, box_set_rec exp)
++  | Def'(var, expr) -> Def'(var, box_set_rec expr)
++  | Or'(expr_list ) -> Or'(List.map box_set_rec expr_list) 
++  | LambdaSimple'(params, body) -> let (bodyA, set_list, indx) = get_body_and_setlist body params 
++  in if(set_list != []) then let new_body = Seq'(set_list @ [bodyA]) in LambdaSimple'(params, box_set_rec new_body) else LambdaSimple'(params,box_set_rec bodyA)
++  | LambdaOpt'(params, optional, body) ->  let (bodyA, set_list, indx) = get_body_and_setlist body (params @ [optional])
++  in if(set_list != []) then let new_body = Seq'(set_list @ [bodyA]) in LambdaOpt'(params, optional , box_set_rec new_body) else LambdaOpt'(params, optional , box_set_rec bodyA)
++  | Applic'(closure, args) -> let closureB = box_set_rec closure in let argsB = List.map box_set_rec args in Applic'(closureB,argsB)
++  | ApplicTP'(closure, args) -> let closureB = box_set_rec closure in let argsB = List.map  box_set_rec args in ApplicTP'(closureB,argsB)
++  |_-> e;;
++  
++let box_set e = box_set_rec e;;
++
++let run_semantics expr =
++  box_set
++    (annotate_tail_calls
++       (annotate_lexical_addresses expr));;
++  
++end;; (* struct Semantics *)
++
++(*tests
++(lambda (x) x (lambda () (set! x 1))) //need
++(lambda (x) (lambda () x) (lambda () (set! x 1))) //need
++(lambda (x) (lambda () (lambda () x) (lambda () (set! x 1)))) //dont
++(lambda (x) x (set! x 1)) //dont
++(lambda (x) (lambda () x (lambda () (set! x 1)))) //dont
++(lambda (x) (lambda () x) (lambda () (lambda () (set! x 1)))) //need
++(lambda (x) (lambda () (lambda() x)) (lambda () (lambda() (set! x 1))))
++(lambda (y x) (lambda () (lambda() x y)) (lambda () (lambda() (set! x 1)))) //need x not y
++(lambda (y x) (lambda () (lambda() x y)) (lambda () (lambda() (set! x 1) (set! y 1)))) //need x,y
++(lambda (x y) (x y) (lambda () (lambda () (lambda () (set! x ((lambda (z) (set! y x)) y)))))) //need x, y
++(lambda (x y z) (lambda (y) (set! x 5) (+ x y)) (+ x y z)) //need x
++(y (lambda (y) (set! a (lambda (b) (a b))) (set! t (lambda (x) (set! y (lambda (j) (x j x))) h)) (y a))) //need y
++*)
+diff --git a/tag-parser.ml b/tag-parser.ml
+index 712f408..2b53a04 100644
+--- a/tag-parser.ml
++++ b/tag-parser.ml
+@@ -1,67 +1,244 @@
+-#use "reader.ml";;
+-
+-type constant =
+-  | Sexpr of sexpr
+-  | Void
+-
+-type expr =
+-  | Const of constant
+-  | Var of string
+-  | If of expr * expr * expr
+-  | Seq of expr list
+-  | Set of expr * expr
+-  | Def of expr * expr
+-  | Or of expr list
+-  | LambdaSimple of string list * expr
+-  | LambdaOpt of string list * string * expr
+-  | Applic of expr * (expr list);;
+-
+-let rec expr_eq e1 e2 =
+-  match e1, e2 with
+-  | Const Void, Const Void -> true
+-  | Const(Sexpr s1), Const(Sexpr s2) -> sexpr_eq s1 s2
+-  | Var(v1), Var(v2) -> String.equal v1 v2
+-  | If(t1, th1, el1), If(t2, th2, el2) -> (expr_eq t1 t2) &&
+-                                            (expr_eq th1 th2) &&
+-                                              (expr_eq el1 el2)
+-  | (Seq(l1), Seq(l2)
+-    | Or(l1), Or(l2)) -> List.for_all2 expr_eq l1 l2
+-  | (Set(var1, val1), Set(var2, val2)
+-    | Def(var1, val1), Def(var2, val2)) -> (expr_eq var1 var2) &&
+-                                             (expr_eq val1 val2)
+-  | LambdaSimple(vars1, body1), LambdaSimple(vars2, body2) ->
+-     (List.for_all2 String.equal vars1 vars2) &&
+-       (expr_eq body1 body2)
+-  | LambdaOpt(vars1, var1, body1), LambdaOpt(vars2, var2, body2) ->
+-     (String.equal var1 var2) &&
+-       (List.for_all2 String.equal vars1 vars2) &&
+-         (expr_eq body1 body2)
+-  | Applic(e1, args1), Applic(e2, args2) ->
+-     (expr_eq e1 e2) &&
+-       (List.for_all2 expr_eq args1 args2)
+-  | _ -> false;;
+-	
+-                       
+-exception X_syntax_error;;
+-
+-module type TAG_PARSER = sig
+-  val tag_parse_expression : sexpr -> expr
+-  val tag_parse_expressions : sexpr list -> expr list
+-end;; (* signature TAG_PARSER *)
+-
+-module Tag_Parser : TAG_PARSER = struct
+-
+-let reserved_word_list =
+-  ["and"; "begin"; "cond"; "define"; "else";
+-   "if"; "lambda"; "let"; "let*"; "letrec"; "or";
+-   "quasiquote"; "quote"; "set!"; "unquote";
+-   "unquote-splicing"];;  
+-
+-(* work on the tag parser starts here *)
+-
+-let tag_parse_expression sexpr = raise X_not_yet_implemented;;
+-
+-let tag_parse_expressions sexpr = raise X_not_yet_implemented;;
+-
+-  
+-end;; (* struct Tag_Parser *)
++
++#use "reader.ml";;
++open Reader;;
++
++type constant =
++  | Sexpr of sexpr
++  | Void
++
++type expr =
++  | Const of constant
++  | Var of string
++  | If of expr * expr * expr
++  | Seq of expr list
++  | Set of expr * expr
++  | Def of expr * expr
++  | Or of expr list
++  | LambdaSimple of string list * expr
++  | LambdaOpt of string list * string * expr
++  | Applic of expr * (expr list);;
++
++let rec expr_eq e1 e2 =
++  match e1, e2 with
++  | Const Void, Const Void -> true
++  | Const(Sexpr s1), Const(Sexpr s2) -> sexpr_eq s1 s2
++  | Var(v1), Var(v2) -> String.equal v1 v2
++  | If(t1, th1, el1), If(t2, th2, el2) -> (expr_eq t1 t2) &&
++                                            (expr_eq th1 th2) &&
++                                              (expr_eq el1 el2)
++  | (Seq(l1), Seq(l2)
++    | Or(l1), Or(l2)) -> List.for_all2 expr_eq l1 l2
++  | (Set(var1, val1), Set(var2, val2)
++    | Def(var1, val1), Def(var2, val2)) -> (expr_eq var1 var2) &&
++                                             (expr_eq val1 val2)
++  | LambdaSimple(vars1, body1), LambdaSimple(vars2, body2) ->
++     (List.for_all2 String.equal vars1 vars2) &&
++       (expr_eq body1 body2)
++  | LambdaOpt(vars1, var1, body1), LambdaOpt(vars2, var2, body2) ->
++     (String.equal var1 var2) &&
++       (List.for_all2 String.equal vars1 vars2) &&
++         (expr_eq body1 body2)
++  | Applic(e1, args1), Applic(e2, args2) ->
++     (expr_eq e1 e2) &&
++       (List.for_all2 expr_eq args1 args2)
++  | _ -> false;;
++	
++                       
++exception X_syntax_error;;
++
++module type TAG_PARSER = sig
++  val tag_parse_expression : sexpr -> expr
++  val tag_parse_expressions : sexpr list -> expr list
++end;; (* signature TAG_PARSER *)
++
++module Tag_Parser : TAG_PARSER = struct
++
++let reserved_word_list =
++  ["and"; "begin"; "cond"; "define"; "else";
++   "if"; "lambda"; "let"; "let*"; "letrec"; "or";
++   "quasiquote"; "quote"; "set!"; "unquote";
++   "unquote-splicing"];;  
++
++(* work on the tag parser starts here *)
++let isReserved str = List.fold_right (fun curr acc-> if(curr = str) then true else acc) reserved_word_list false;;
++
++(*returns list from pair - if its improper doesn't return the last element*)
++let rec pair_to_list f pair= match pair with
++|Nil -> []
++|Pair(x, Nil) -> [f x] (*proper list last elemnt*)
++|Pair(x, Pair(y,rest)) -> (f x) :: (pair_to_list f (Pair(y, rest)))
++|Pair(x, something) -> [f x] (*improper list last element, dont take the last element*)      
++|_ -> raise X_syntax_error;;
++
++let rec pair_to_pair f pair = match pair with
++|Nil -> Nil
++|Pair(x, Nil) -> Pair((f x),Nil)
++|Pair(x,rest) -> Pair((f x),(pair_to_pair f rest))
++|_ ->raise X_syntax_error;;
++
++let rec pair_concate pairs add = match pairs with
++|Nil -> add
++|Pair(x, Nil) -> Pair(x,add)
++|Pair(x,rest) -> Pair(x,(pair_concate rest add))
++|_ ->raise X_syntax_error;;
++
++let rec getOptinal pair = match pair with
++|Nil -> ""          (*no parameters*)
++|Pair(x, Nil) -> ""
++|Pair(x, Symbol(sym)) -> sym (*has optional parameter- improper list*)
++|Pair(x, Pair(y, rest)) -> getOptinal(Pair(y, rest))
++|_-> raise X_syntax_error;;
++
++let pull_string pair = pair_to_list 
++(fun(x)-> match x with
++|Symbol(x)-> x
++|_ -> raise X_syntax_error) pair;;
++
++let rec expendQuasy sexpr = match sexpr with 
++|Pair(Symbol("unquote"), Pair (exp1, Nil)) -> exp1
++|Pair(Symbol("unquote-splicing"), Pair (exp1, Nil)) -> raise X_syntax_error
++|Symbol(str) -> Pair(Symbol("quote"), Pair(Symbol(str), Nil))
++|Nil ->Pair (Symbol("quote"),Pair (Nil, Nil))
++|Pair(Pair(Symbol("unquote-splicing"), Pair (exp1, Nil)),b) -> Pair(Symbol("append"),Pair(exp1,Pair((expendQuasy b),Nil)))
++|Pair(a,Pair(Symbol("unquote-splicing"), Pair (exp1, Nil))) -> Pair(Symbol("cons"),Pair((expendQuasy a),Pair(exp1,Nil)))
++|Pair(a,b)-> Pair(Symbol("cons"),Pair((expendQuasy a),Pair((expendQuasy b),Nil)))
++|_ -> sexpr;;
++
++let macro_expansion_and sexp = match sexp with 
++|Nil -> Bool(true)
++|Pair(expr,Nil) -> expr
++|Pair(expr,rest) ->  Pair(Symbol("if"), Pair(expr, Pair(Pair (Symbol("and"),rest), Pair(Bool(false), Nil)))) 
++|_ ->raise X_syntax_error;;
++
++let macro_expansion_cond_rib rib cont = match rib, cont with
++|Pair(expr, Pair(Symbol("=>"), Pair(expf, Nil))), Nil-> Pair (Symbol "let",
++ Pair(Pair(Pair(Symbol "value", Pair(expr , Nil)), Pair(Pair (Symbol "f",
++ Pair (Pair (Symbol "lambda", Pair (Nil, Pair (expf, Nil))), Nil)), Nil)), Pair(Pair (Symbol "if",
++ Pair (Symbol "value", Pair (Pair (Pair (Symbol "f", Nil), Pair (Symbol "value", Nil)), cont))),  Nil)))
++|Pair(expr, Pair(Symbol("=>"), Pair(expf, Nil))), _-> Pair (Symbol "let",
++ Pair(Pair(Pair (Symbol "value", Pair (expr, Nil)), Pair (Pair (Symbol "f",
++ Pair (Pair (Symbol "lambda", Pair (Nil, Pair (expf, Nil))), Nil)), Pair (Pair (Symbol "rest",
++ Pair (Pair (Symbol "lambda", Pair (Nil, cont)), Nil)),Nil))),
++ Pair (Pair (Symbol "if", Pair (Symbol "value", Pair (Pair (Pair (Symbol "f", Nil), Pair (Symbol "value", Nil)),
++ Pair (Pair (Symbol "rest", Nil), Nil)))),  Nil)))
++|Pair(Symbol("else"), seq), _ -> Pair(Symbol("begin"), seq)
++|Pair(test, dit), _ -> Pair(Symbol("if"), Pair(test, Pair(Pair(Symbol("begin"),dit), cont))) 
++|_, _-> rib ;; (*implicit else*)
++
++let rec macro_expansion_cond ribs = match ribs with 
++|Pair(rib, Nil) -> macro_expansion_cond_rib rib Nil
++|Pair(rib, restRibs)-> let rest_ribs_expander = macro_expansion_cond restRibs in
++ macro_expansion_cond_rib rib (Pair(rest_ribs_expander, Nil))
++ |_-> raise X_syntax_error;; 
++
++let rec get_params ribs = match ribs with 
++|Pair( Pair(param, Pair(value, Nil)), Nil) -> Pair(param, Nil)    (*last rib*)
++|Pair( Pair(param, Pair(value, Nil)), ribs)-> Pair(param, get_params ribs)
++|_-> raise X_syntax_error ;; 
++
++let rec get_values ribs = match ribs with 
++|Pair( Pair(param, Pair(value, Nil)), Nil) -> Pair(value, Nil)    (*last rib*)
++|Pair( Pair(param, Pair(value, Nil)), ribs)-> Pair(value, get_values ribs)
++|_-> raise X_syntax_error ;; 
++
++let macro_expansion_let sexpr_let = match sexpr_let with 
++| Pair(Symbol("let"), Pair(Nil, body)) -> Pair(Pair(Symbol("lambda"), Pair(Nil , body)), Nil)
++| Pair(Symbol("let"), Pair(ribs, body)) -> Pair(Pair(Symbol("lambda"), Pair(get_params ribs,body)), get_values ribs)
++|_-> raise X_syntax_error;;
++
++let macro_expansion_let_star sexpr = match sexpr with 
++|Pair(Symbol("let*"), Pair(Nil, body)) -> Pair(Symbol("let"), Pair(Nil, body))
++|Pair(Symbol("let*"), Pair(Pair(rib, Nil), body)) -> 
++Pair(Symbol("let"), Pair(Pair(rib, Nil), body)) 
++|Pair(Symbol("let*"), Pair(Pair(rib, rest_ribs), body)) -> 
++Pair(Symbol("let"), Pair(Pair(rib, Nil), Pair(Pair(Symbol("let*"), Pair(rest_ribs, body)), Nil))) 
++|_-> raise X_syntax_error;;
++
++let rib_expand rib = match rib with 
++|Pair(name,Pair(_,Nil)) -> Pair(name,Pair(Pair (Symbol("quote"), Pair(Symbol("whatever"), Nil)),Nil))
++|_ -> raise X_syntax_error;;
++
++let set_rib_expend rib = match rib with 
++|Pair(name,Pair(func,Nil)) -> Pair (Symbol ("set!"), Pair (name, Pair (func, Nil)))
++|_ -> raise X_syntax_error;;
++
++
++let macro_expansion_letrec sexpr = match sexpr with 
++|Pair(Symbol("letrec"), Pair(ribs, body)) -> let ribsLet = pair_to_pair rib_expand ribs
++ in let ribsSet = pair_to_pair set_rib_expend ribs in
++ Pair (Symbol("let"),Pair(ribsLet, (pair_concate ribsSet body)))
++|_ -> raise X_syntax_error;;
++
++let macro_expansion_MIT_define sexpr = match sexpr with 
++| Pair(Symbol("define"), Pair(Pair(name, args), body)) -> 
++Pair(Symbol("define"), Pair(name, Pair(Pair(Symbol("lambda"), Pair(args, body)), Nil)))
++|_-> raise X_syntax_error;;
++
++let duplicate_arg arg_str args_list = 
++let counter_arg = List.fold_right (fun curr acc -> if(curr = arg_str) then acc+ 1 else acc) args_list 0
++in if(counter_arg > 1) then true else false;; 
++
++let check_if_legal_args list_of_args = 
++let args = pull_string list_of_args in 
++let optional = getOptinal list_of_args in 
++let args = optional :: args in 
++let check = List.fold_right (fun curr acc-> if((isReserved curr) || (duplicate_arg curr args)) then false else acc ) args true 
++in check;; 
++
++let rec tag_parse sexpr =  
++
++let rec get_body_exprs body = match body with 
++|Pair(sexpr, Nil) -> [tag_parse sexpr] (*one expr in the body*)
++|Pair(sexpr, rest) -> (tag_parse sexpr) :: (get_body_exprs rest) (*seq*)
++|_-> raise X_syntax_error  in
++
++let tag_parse_body body = 
++let exprs = get_body_exprs body in 
++match exprs with 
++|[expr] -> expr 
++|_ -> Seq(exprs) in
++
++match sexpr with
++| Pair(Symbol("quasiquote"),Pair(sexp,Nil)) -> tag_parse (expendQuasy sexp)
++| Pair(Symbol("and"),sexp) -> tag_parse (macro_expansion_and sexp)
++| Pair(Symbol("let*"), _) -> tag_parse (macro_expansion_let_star sexpr)
++| Pair(Symbol("let"), Pair(Nil, body)) -> tag_parse (macro_expansion_let sexpr)
++| Pair(Symbol("let"), Pair(Pair(rib, ribs), body)) ->  tag_parse (macro_expansion_let sexpr)
++| Pair(Symbol("letrec"),Pair(ribs, body)) -> tag_parse (macro_expansion_letrec sexpr)
++| Pair(Symbol("cond"), ribs) -> tag_parse (macro_expansion_cond ribs)
++| Pair(Symbol("begin"), Nil) -> Const(Void)
++| Pair(Symbol("begin"), Pair(sexp, Nil)) -> tag_parse sexp 
++| Pair(Symbol("begin"), list_of_exp) -> Seq(pair_to_list tag_parse list_of_exp)
++| Pair(Symbol("or") , list_of_params) -> let exp_list = pair_to_list tag_parse list_of_params in 
++ if (exp_list == []) then Const(Sexpr(Bool(false))) else if (List.length(exp_list) == 1) then List.hd(exp_list) else Or(exp_list)
++| Pair(Symbol("set!"), Pair(id, Pair (value,Nil))) -> Set((tag_parse id),(tag_parse value))
++| Pair(Symbol("define"), Pair(Symbol(nameVar) , Pair(exp , Nil))) -> Def(tag_parse (Symbol(nameVar)), tag_parse exp)
++| Pair(Symbol("define"), Pair(Pair(Symbol(name), args), body)) -> tag_parse (macro_expansion_MIT_define sexpr)
++| Pair(Symbol("lambda"), Pair(Symbol(sym), body))-> LambdaOpt([],sym, tag_parse_body body)
++| Pair(Symbol("lambda"), Pair(list_of_param, body))-> 
++  let check = check_if_legal_args list_of_param in if(check = false) then raise X_syntax_error else
++  let optional = getOptinal list_of_param in 
++  if(optional = "") then LambdaSimple(pull_string list_of_param , tag_parse_body body)
++  else LambdaOpt(pull_string list_of_param, optional, tag_parse_body body)
++| Pair(Symbol("if"), Pair(test, Pair(dit, Pair(dif, Nil)))) ->
++ If(tag_parse  test, tag_parse dit, tag_parse dif)
++| Pair(Symbol("if"), Pair(test,Pair(dit, Nil))) -> If(tag_parse  test, tag_parse dit, Const(Void))
++| Pair(Symbol("quote"), Pair(x, Nil)) -> Const(Sexpr(x)) 
++| Pair(closure, args_list)-> Applic((tag_parse closure), (pair_to_list tag_parse args_list))
++| Symbol(x) ->  if(isReserved(x) = false) then Var(x)  else raise X_syntax_error
++| TagRef(x) -> Const(Sexpr(TagRef(x)))
++| TaggedSexpr (st, Pair (Symbol "quote", Pair (x, Nil))) -> Const(Sexpr(TaggedSexpr(st, x)))
++| TaggedSexpr (st,x) -> Const(Sexpr(TaggedSexpr(st, x)))
++| Number(x) -> Const(Sexpr(Number(x)))
++| Bool(x) -> Const(Sexpr(Bool(x)))
++| Char(x) -> Const(Sexpr(Char(x)))
++| String(x) -> Const(Sexpr(String(x)))
++|_-> raise X_syntax_error;;
++
++let tag_parse_expression sexpr = tag_parse sexpr;;
++
++
++let tag_parse_expressions sexpr = List.map tag_parse sexpr;;
++
++end;; (* struct Tag_Parser *)
++
