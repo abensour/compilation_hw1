@@ -52,7 +52,7 @@ fvar_tbl:
 " ^
   (* This line should be adapted to your fvar-addressing scheme. 
      I.e., if you use direct labeling, you should output them here. *)
-  (String.concat "\n" (List.map (fun _ -> "dq T_UNDEFINED") fvars_tbl)) ^ "
+  (String.concat "\n" (List.map (fun _ -> "dq T_UNDEFINED") fvars_tbl)) ^ "  
 
 global main
 section .text
