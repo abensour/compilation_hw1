@@ -81,9 +81,42 @@ module Code_Gen = struct
   let reduce_list = reduce_list extended_list in
   build_consts_table reduce_list;;
 
+let exists_str curr_const consts_list = 
+  List.fold_left (fun acc curr -> if (curr = curr_const) then true else acc) false consts_list;;
+  
+let reduce_list_str l = 
+  List.fold_right (fun curr acc -> if(exists_str curr acc) then acc else [curr]@acc) l [];;
 
 
-  let make_fvars_tbl asts = raise X_not_yet_implemented;;
+let primitive_names = 
+  ["boolean?"; "float?"; "integer?"; "pair?"; "null?"; "char?"; "string?"; "procedure?"; "symbol?"; "string-length";
+   "string-ref"; "string-set!"; "make-string"; "symbol->string"; "char->integer"; "integer->char"; "eq?";
+   "+"; "*"; "-"; "/"; "<"; "=" (* you can add yours here *)];;
+
+
+let rec fvars_list_from_exp exp'  = 
+match exp' with 
+  | Var'(VarFree(var_name)) ->  [var_name] 
+  | If'(test, dit, dif) -> (fvars_list_from_exp test) @ (fvars_list_from_exp dit) @ (fvars_list_from_exp dif) 
+  | Seq'(expr_list) -> List.fold_left (fun acc_list expr -> acc_list @ fvars_list_from_exp expr) [] expr_list
+  | Set'(Var'(VarFree(var_name)), expr) -> [var_name] @ fvars_list_from_exp expr
+  | Set'(Var'(_), expr) -> fvars_list_from_exp expr
+  | Def'(var, expr) -> fvars_list_from_exp var @ fvars_list_from_exp expr
+  | Or'(expr_list ) -> List.fold_left (fun acc_list expr -> acc_list @ fvars_list_from_exp expr) [] expr_list
+  | LambdaSimple'(_, bodyL) -> fvars_list_from_exp bodyL
+  | LambdaOpt'(_,_, bodyL)-> fvars_list_from_exp bodyL
+  | Applic'(closure, args) -> fvars_list_from_exp closure @ List.fold_left (fun acc_list expr -> acc_list @ fvars_list_from_exp expr) [] args
+  | ApplicTP'(closure, args) -> fvars_list_from_exp closure @ List.fold_left (fun acc_list expr -> acc_list @ fvars_list_from_exp expr) [] args
+  | BoxSet'(var, expr) -> fvars_list_from_exp expr
+  |_-> [];;
+(*[("boolean?" , 0);("is_boolean", 1)]*)
+let gen_fvars_table asts = let fvars_list = List.fold_left (fun acclist exp' -> acclist@ (fvars_list_from_exp exp')) [] asts in
+let fvars_set = reduce_list_str (primitive_names@fvars_list) in 
+let (fvars_table,_) = List.fold_left (fun (acclist,indx) str -> ((acclist @ [(str,indx)]),( indx + 1))) ([],0) fvars_set in fvars_table;;
+
+
+
+  let make_fvars_tbl asts = gen_fvars_table asts;;
   let generate consts fvars e = raise X_not_yet_implemented;;
 end;;
 
