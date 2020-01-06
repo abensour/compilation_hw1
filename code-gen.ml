@@ -47,6 +47,7 @@ module Code_Gen = struct
   let rec extend_consts_table const = match const with
     | Sexpr(Symbol(string)) -> [Sexpr(String(string))]
     | Sexpr(Pair(car_const, cdr_const)) -> (extend_consts_table (Sexpr(car_const))) @  (extend_consts_table (Sexpr(cdr_const))) @ [const]
+    | Sexpr(TaggedSexpr(string, sexpr)) -> extend_consts_table (Sexpr(sexpr))
     |_-> [const];;
 
   let exists curr_const consts_list = 
