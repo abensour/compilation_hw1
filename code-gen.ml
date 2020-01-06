@@ -66,12 +66,17 @@ module Code_Gen = struct
   |Sexpr(sexp1), Sexpr(sexp2) -> if (sexpr_eq sexp1 sexp2) then offset else acc
   |_,_-> acc) (-1) table;; (*maybe throw an error???*)
   
-   let get_const_address_2 table const = 
+  let rec get_const_address_iter_2 table const = 
   List.fold_left (fun acc (curr_const, (offset, string))-> match curr_const, const with 
   |Void , Void ->  offset 
-  |Sexp(TagRef(name1)), Sexp(TagRef(name2)) -> if(name1 = name2) then (get_const_address map.get(name1))
+  |Sexpr(TagRef(name1)), Sexpr(TagRef(name2)) -> if(name1 = name2) then let sexp = List.assoc name1 pList.pairsL in get_const_address_iter_2 (Sexpr(sexp))
   |Sexpr(sexp1), Sexpr(sexp2) -> if (sexpr_eq sexp1 sexp2) then offset else acc
-  |_,_-> acc) (-1) table;; (*maybe throw an error???*)
+  |_,_-> acc) (-1) table;; (*maybe throw an error???*) 
+
+  let get_const expr = 
+  match expr with
+  | TagRef(string) -> List.assoc name1 pList.pairsL
+  |_-> expr;;
 
   (*returns entry and the size of the const*)
   let build_const_entry const table offset = match const with 
@@ -86,8 +91,31 @@ module Code_Gen = struct
   |Sexpr(Symbol(str)) -> ( (const, (offset, " MAKE_LITERAL_SYMBOL(consts+ "^ (string_of_int (get_const_address table (Sexpr(String(str))))) ^")")), 9)
   |Sexpr(Pair(sexpr1, sexpr2)) -> ( (const, (offset, " MAKE_LITERAL_PAIR(consts+ "^ (string_of_int (get_const_address table (Sexpr(sexpr1)))) ^"
   , consts+" ^ (string_of_int (get_const_address table (Sexpr(sexpr2)))) ^")")), 17)
-  |Sexpr(TagRef(name)) -> let exp = map.get(name) build_const_entry(exp)
+  |Sexpr(TagRef(name)) -> ((const, (offset, "")) , 0)
+  |_-> raise X_should_not_happend;;
   
+  let build_const_entry_iter_2 (const,(offset,string)) table offset = match const with
+  |Void -> ( (const, (offset, "MAKE_VOID")) , 1)
+  |Sexpr(Nil) -> ( (const, (offset, "MAKE_NIL")), 1)
+  |Sexpr(Bool false) -> ( (const, (offset, "MAKE_BOOL(0)")), 2)
+  |Sexpr(Bool true) -> ( (const, (offset, "MAKE_BOOL(1)")), 2)
+  |Sexpr(Number(Int(num))) -> ( (const, (offset, "MAKE_LITERAL_INT(" ^ (string_of_int num) ^")")), 9)
+  |Sexpr(Number(Float(num))) -> ( (const, (offset, "MAKE_LITERAL_FLOAT(" ^ (string_of_float num) ^")")), 9)
+  |Sexpr(Char(c)) -> ( (const, (offset, "MAKE_LITERAL_CHAR("^ (Char.escaped c) ^")")), 2)
+  |Sexpr(String(str)) -> ( (const, (offset, " MAKE_LITERAL_STRING(\" "^ str ^" \")")), (String.length str) + 9) (*to check!*)
+  |Sexpr(Symbol(str)) -> ( (const, (offset, " MAKE_LITERAL_SYMBOL(consts+ "^ (string_of_int (get_const_address_iter_2 table (Sexpr(String(str))))) ^")")), 9)
+  |Sexpr(Pair(sexpr1, sexpr2)) -> let exp1 = get_const sexp1 in let exp2 = get_const sexp2 in ( (Pair(exp1,exp2), (offset, " MAKE_LITERAL_PAIR(consts+ "^ (string_of_int (get_const_address_iter_2 table (Sexpr(sexpr1)))) ^"
+  , consts+" ^ (string_of_int (get_const_address_iter_2 table (Sexpr(sexpr2)))) ^")")), 17)
+  |Sexpr(TagRef(name)) -> ((const, (offset, "")) , 0)
+  |_ -> raise X_should_not_happend;;
+  
+
+  let build_consts_table_iter_2 table_1 = 
+  let (table, last_offset) = 
+  List.fold_left (fun (table, offset) curr -> 
+  let (const_entry, size_of_const) = build_const_entry_iter_2 curr table_1 offset in
+  (table@[const_entry], offset+size_of_const ))  ([], 0) table_1
+  in table;;
 
   let build_consts_table consts_list = 
   let (table, last_offset) = 
@@ -96,26 +124,71 @@ module Code_Gen = struct
   (table@[const_entry], offset+size_of_const ))  ([], 0) consts_list
   in table;;
   
+  let rec rename_const const indx =
+ match const with 
+  | Pair(car_const, cdr_const) -> Pair((rename_const car_const indx), (rename_const cdr_const indx))
+  | TaggedSexpr(string, sexpr) -> let renamed_string = string ^ "_" ^ string_of_int indx in TaggedSexpr(renamed_string,rename_const sexpr indx )
+  | TagRef(string) -> let renamed_string = string ^ "_" ^ string_of_int indx in TagRef(renamed_string)
+  |_-> const;;
 
-  let check string = 
+
+let rec rename_reffs exp' indx = match exp' with
+  | Const'(Sexpr(expr)) -> Const'(Sexpr(rename_const expr indx))
+  | BoxSet'(var_name, expr) -> BoxSet'(var_name, rename_reffs expr indx)
+  | If'(test, dit, dif) -> If'((rename_reffs test indx) , (rename_reffs dit indx) , (rename_reffs dif indx))
+  | Seq'(expr_list) -> Seq'(List.map (fun exp -> rename_reffs exp indx) expr_list) 
+  | Set'(var, expr)-> Set'(var, rename_reffs expr indx)
+  | Def'(var, expr) -> Def'(var , rename_reffs expr indx)
+  | Or'(expr_list) -> Or'(List.map (fun exp -> rename_reffs exp indx) expr_list) 
+  | LambdaSimple'(args, expr)->  LambdaSimple'(args,rename_reffs expr indx) 
+  | LambdaOpt'(args, optional, expr) -> LambdaOpt'(args, optional, rename_reffs expr indx)
+  | Applic'(closure, params)-> Applic'(rename_reffs closure indx, (List.map (fun exp -> rename_reffs exp indx) params)) 
+  | ApplicTP'(closure, params)-> Applic'(rename_reffs closure indx, (List.map (fun exp -> rename_reffs exp indx) params)) 
+  | _ -> exp';;
+
+type pairsList = { mutable pairsL :  (string*sexpr) list };;
+let pList = { pairsL = []};;
+
+let rec remove_tagged const  =
+ match const with 
+  | Pair(car_const, cdr_const) -> Pair((remove_tagged car_const ), (remove_tagged cdr_const ))
+  | TaggedSexpr(string, sexpr) -> let () = pList.pairsL <- (string,sexpr) :: pList.pairsL in sexpr
+  |_-> const;;
+
+let rec build_dictionary_and_remove_tagges exp' =
+match exp' with  
+  | Const'(Sexpr(expr)) -> Const'(Sexpr(remove_tagged expr))
+  | BoxSet'(var_name, expr) -> BoxSet'(var_name, build_dictionary_and_remove_tagges expr)
+  | If'(test, dit, dif) -> If'((build_dictionary_and_remove_tagges test ) , (build_dictionary_and_remove_tagges dit ) , (build_dictionary_and_remove_tagges dif ))
+  | Seq'(expr_list) -> Seq'(List.map (fun exp -> build_dictionary_and_remove_tagges exp ) expr_list) 
+  | Set'(var, expr)-> Set'(var, build_dictionary_and_remove_tagges expr )
+  | Def'(var, expr) -> Def'(var , build_dictionary_and_remove_tagges expr )
+  | Or'(expr_list) -> Or'(List.map (fun exp -> build_dictionary_and_remove_tagges exp ) expr_list) 
+  | LambdaSimple'(args, expr)->  LambdaSimple'(args,build_dictionary_and_remove_tagges expr ) 
+  | LambdaOpt'(args, optional, expr) -> LambdaOpt'(args, optional, build_dictionary_and_remove_tagges expr )
+  | Applic'(closure, params)-> Applic'(build_dictionary_and_remove_tagges closure , (List.map (fun exp -> build_dictionary_and_remove_tagges exp ) params)) 
+  | ApplicTP'(closure, params)-> Applic'(build_dictionary_and_remove_tagges closure , (List.map (fun exp -> build_dictionary_and_remove_tagges exp ) params)) 
+  | _ -> exp';;
+
+let check string = 
   let string_to_asts s = List.map Semantics.run_semantics
                          (Tag_Parser.tag_parse_expressions
                             (Reader.read_sexprs s)) 
   in
   let asts = string_to_asts string in 
-  let must_const = [Void ;Sexpr(Nil); Sexpr(Bool false) ; Sexpr(Bool true)] in
-  let list_of_consts = List.flatten (List.map make_list_of_all_consts asts) in
-  let extended_list = must_const @ List.flatten(List.map extend_consts_table list_of_consts) in
-  let () = biuld_table expand_list in
-  let reduced = reduce_list extended_list in
-  let table_1 = build_consts_table reduced in build_consts_table reduced table
+  let (asts_renamed,length) =  List.fold_left (fun (accList,indx) exp' -> (accList @ [(rename_reffs exp' indx)] , indx +1 )) ([],0) asts in
+  let ast_without_tagggedSexpr =List.fold_left (fun accList curr -> accList @ [build_dictionary_and_remove_tagges curr]) [] asts_renamed in 
+  ast_without_tagggedSexpr;;
+
 
   let make_consts_tbl asts = 
+  let (asts_renamed,length) =  List.fold_left (fun (accList,indx) exp' -> (accList @ [(rename_reffs exp' indx)] , indx +1 )) ([],0) asts in
+  let ast_without_tagggedSexpr =List.fold_left (fun accList curr -> accList @ [build_dictionary_and_remove_tagges curr]) [] asts_renamed in 
   let must_const = [Void ;Sexpr(Nil); Sexpr(Bool false) ; Sexpr(Bool true)] in
-  let list_of_consts = List.flatten (List.map make_list_of_all_consts asts) in
+  let list_of_consts = List.flatten (List.map make_list_of_all_consts ast_without_tagggedSexpr) in
   let extended_list = must_const @ List.flatten (List.map extend_consts_table list_of_consts) in
-  let reduced = reduce_list extended_list in
-  build_consts_table reduced;;
+  let reduce_list = reduce_list extended_list in
+  let table_1 = build_consts_table reduce_list in build_consts_table_iter_2 table_1;; 
 
 let exists_str curr_const consts_list = 
   List.fold_left (fun acc curr -> if (curr = curr_const) then true else acc) false consts_list;;
