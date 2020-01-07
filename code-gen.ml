@@ -1,5 +1,5 @@
 #use "semantic-analyser.ml";;
-
+exception X_this_should_not_happen;;
 (* This module is here for you convenience only!
    You are not required to use it.
    you are allowed to change it. *)
@@ -30,6 +30,9 @@
 end;;*)
 (*module Code_Gen : CODE_GEN = struct*)
 module Code_Gen = struct
+  type pairsList = { mutable pairsL :  (string*sexpr) list };;
+  let pList = { pairsL = []};;
+
   let rec make_list_of_all_consts ast = match ast with 
   | Const'(const) -> [const]
   | BoxSet'(var_name, expr) -> make_list_of_all_consts expr
@@ -69,14 +72,10 @@ module Code_Gen = struct
   let rec get_const_address_iter_2 table const = 
   List.fold_left (fun acc (curr_const, (offset, string))-> match curr_const, const with 
   |Void , Void ->  offset 
-  |Sexpr(TagRef(name1)), Sexpr(TagRef(name2)) -> if(name1 = name2) then let sexp = List.assoc name1 pList.pairsL in get_const_address_iter_2 (Sexpr(sexp))
+  |Sexpr(TagRef(name1)), Sexpr(TagRef(name2)) -> if(name1 = name2) then let sexp = List.assoc name1 pList.pairsL in get_const_address_iter_2 table (Sexpr(sexp)) else acc
   |Sexpr(sexp1), Sexpr(sexp2) -> if (sexpr_eq sexp1 sexp2) then offset else acc
   |_,_-> acc) (-1) table;; (*maybe throw an error???*) 
 
-  let get_const expr = 
-  match expr with
-  | TagRef(string) -> List.assoc name1 pList.pairsL
-  |_-> expr;;
 
   (*returns entry and the size of the const*)
   let build_const_entry const table offset = match const with 
@@ -92,7 +91,7 @@ module Code_Gen = struct
   |Sexpr(Pair(sexpr1, sexpr2)) -> ( (const, (offset, " MAKE_LITERAL_PAIR(consts+ "^ (string_of_int (get_const_address table (Sexpr(sexpr1)))) ^"
   , consts+" ^ (string_of_int (get_const_address table (Sexpr(sexpr2)))) ^")")), 17)
   |Sexpr(TagRef(name)) -> ((const, (offset, "")) , 0)
-  |_-> raise X_should_not_happend;;
+  |_-> raise X_this_should_not_happen;;
   
   let build_const_entry_iter_2 (const,(offset,string)) table offset = match const with
   |Void -> ( (const, (offset, "MAKE_VOID")) , 1)
@@ -104,19 +103,21 @@ module Code_Gen = struct
   |Sexpr(Char(c)) -> ( (const, (offset, "MAKE_LITERAL_CHAR("^ (Char.escaped c) ^")")), 2)
   |Sexpr(String(str)) -> ( (const, (offset, " MAKE_LITERAL_STRING(\" "^ str ^" \")")), (String.length str) + 9) (*to check!*)
   |Sexpr(Symbol(str)) -> ( (const, (offset, " MAKE_LITERAL_SYMBOL(consts+ "^ (string_of_int (get_const_address_iter_2 table (Sexpr(String(str))))) ^")")), 9)
-  |Sexpr(Pair(sexpr1, sexpr2)) -> let exp1 = get_const sexp1 in let exp2 = get_const sexp2 in ( (Pair(exp1,exp2), (offset, " MAKE_LITERAL_PAIR(consts+ "^ (string_of_int (get_const_address_iter_2 table (Sexpr(sexpr1)))) ^"
+  |Sexpr(Pair(sexpr1, sexpr2)) ->  ( (const, (offset, " MAKE_LITERAL_PAIR(consts+ "^ (string_of_int (get_const_address_iter_2 table (Sexpr(sexpr1)))) ^"
   , consts+" ^ (string_of_int (get_const_address_iter_2 table (Sexpr(sexpr2)))) ^")")), 17)
   |Sexpr(TagRef(name)) -> ((const, (offset, "")) , 0)
-  |_ -> raise X_should_not_happend;;
+  |_ -> raise X_this_should_not_happen;;
   
 
   let build_consts_table_iter_2 table_1 = 
   let (table, last_offset) = 
   List.fold_left (fun (table, offset) curr -> 
   let (const_entry, size_of_const) = build_const_entry_iter_2 curr table_1 offset in
-  (table@[const_entry], offset+size_of_const ))  ([], 0) table_1
+  match const_entry with 
+  |(Sexpr(TagRef(_)),(_,_)) -> (table, offset)
+  |_ -> (table @[const_entry], offset+size_of_const ))  ([], 0) table_1
   in table;;
-
+  
   let build_consts_table consts_list = 
   let (table, last_offset) = 
   List.fold_left (fun (table, offset) curr -> 
@@ -145,9 +146,6 @@ let rec rename_reffs exp' indx = match exp' with
   | Applic'(closure, params)-> Applic'(rename_reffs closure indx, (List.map (fun exp -> rename_reffs exp indx) params)) 
   | ApplicTP'(closure, params)-> Applic'(rename_reffs closure indx, (List.map (fun exp -> rename_reffs exp indx) params)) 
   | _ -> exp';;
-
-type pairsList = { mutable pairsL :  (string*sexpr) list };;
-let pList = { pairsL = []};;
 
 let rec remove_tagged const  =
  match const with 
@@ -178,7 +176,11 @@ let check string =
   let asts = string_to_asts string in 
   let (asts_renamed,length) =  List.fold_left (fun (accList,indx) exp' -> (accList @ [(rename_reffs exp' indx)] , indx +1 )) ([],0) asts in
   let ast_without_tagggedSexpr =List.fold_left (fun accList curr -> accList @ [build_dictionary_and_remove_tagges curr]) [] asts_renamed in 
-  ast_without_tagggedSexpr;;
+  let must_const = [Void ;Sexpr(Nil); Sexpr(Bool false) ; Sexpr(Bool true)] in
+  let list_of_consts = List.flatten (List.map make_list_of_all_consts ast_without_tagggedSexpr) in
+  let extended_list = must_const @ List.flatten (List.map extend_consts_table list_of_consts) in
+  let reduce_list = reduce_list extended_list in
+  let table_1 = build_consts_table reduce_list in build_consts_table_iter_2 table_1;;
 
 
   let make_consts_tbl asts = 
