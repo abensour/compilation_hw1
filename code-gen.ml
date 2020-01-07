@@ -150,7 +150,7 @@ let rec rename_reffs exp' indx = match exp' with
 let rec remove_tagged const  =
  match const with 
   | Pair(car_const, cdr_const) -> Pair((remove_tagged car_const ), (remove_tagged cdr_const ))
-  | TaggedSexpr(string, sexpr) -> let () = pList.pairsL <- (string,sexpr) :: pList.pairsL in sexpr
+  | TaggedSexpr(string, sexpr) -> let () = pList.pairsL <- (string,sexpr) :: pList.pairsL in remove_tagged sexpr
   |_-> const;;
 
 let rec build_dictionary_and_remove_tagges exp' =
