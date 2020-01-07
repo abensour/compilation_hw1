@@ -180,7 +180,7 @@ let check string =
   let list_of_consts = List.flatten (List.map make_list_of_all_consts ast_without_tagggedSexpr) in
   let extended_list = must_const @ List.flatten (List.map extend_consts_table list_of_consts) in
   let reduced = reduce_list extended_list in
-  let table_1 = build_consts_table reduced in build_consts_table_iter_2 table_1;;
+  let table_1 = build_consts_table reduced in build_consts_table_iter_2 ;;
 
 
   let make_consts_tbl asts = 
@@ -231,21 +231,34 @@ let (fvars_table,_) = List.fold_left (fun (acclist,indx) str -> ((acclist @ [(st
   let get_address_in_const_table constant consts_table = 
     "const_tbl+" ^ (string_of_int (get_const_address consts_table constant));;
 
-  let generate consts fvars e = match e with
+
+
+  type mutable_int = {mutable index:int};; 
+  let label_index = {index = 0};;
+
+  let rec generate consts fvars e = match e with
   | Const'(constant)->  "mov rax, " ^ (get_address_in_const_table constant consts)
-  (*| Var'(var) ->
-  | Box'(var) ->
-  | BoxGet'(var)->
-  | BoxSet'(var, expr)->
-  | If'(test, dit, dif) ->
-  | Seq'(expr_list)->
-  | Set'(expr1, expr2)->
-  | Def'(expr1, expr2)->
-  | Or'(expr_list)->
+  | Var'(VarParam(_,minor)) -> "mov rax, qword [rbp + 8 * (4 + " ^ string_of_int minor ^ ")]"
+  | Var'(VarBound(_,major,minor)) -> "mov rax, qword [rbp + 8 ∗ 2] \n mov rax, qword [rax + 8 ∗ " ^ string_of_int major ^"] \n mov rax, qword [rax + 8 ∗" ^ string_of_int minor ^ "]"  
+  | Var'(VarFree(name)) -> "mov rax, qword [fvar_tbl+" ^  (string_of_int (List.assoc name fvars)) ^ "]"
+  | BoxGet'(v)-> (generate consts fvars (Var'(v))) ^ "\n" ^ "mov rax, qword [rax]"
+  | BoxSet'(v, exp)-> (generate consts fvars exp) ^ "\npush rax" ^ (generate consts fvars (Var'(v))) ^ "\npop qword [rax] \nmov rax, sob_void"
+  | If'(test, dit, dif) -> let str =  (generate consts fvars test) ^ "\n" ^ "cmp rax, sob_false" ^ "\n" ^ "je Lelse" ^ (string_of_int label_index.index)^  "\n"
+  ^ (generate consts fvars dit) ^"\n" ^ "jmp Lexit" ^ (string_of_int label_index.index) ^ "\n" ^ "Lelse" ^ (string_of_int label_index.index) ^":\n" ^ (generate consts fvars dit) 
+  ^ "Lexit" ^(string_of_int label_index.index) ^ ":" in let () = label_index.index <- label_index.index + 1 in str 
+  | Seq'(expr_list)-> List.fold_left (fun acc curr ->  acc ^ "\n" ^ (generate consts fvars curr)) "" expr_list 
+  | Set'(Var'(VarParam(_, minor)), exp)-> (generate consts fvars exp) ^ "\n"^
+  "mov qword [rbp + 8*(4+ " ^ (string_of_int minor) ^ ")], rax" ^"\n"^ 
+  "mov rax, sob_void"
+  |Set'(Var'(VarBound(_,major,minor)), exp) -> (generate consts fvars exp) ^ "\n"^ "mov rbx, qword [rbp + 8*2]" ^ "\n" ^ "mov rbx, qword [rbp + 8*" ^ (string_of_int major) ^ "]" ^ "\n" ^
+  "mov qword [rbx + 8*" ^ (string_of_int minor) ^ "], rax"^  "\n"^ "mov rax, sob_void"
+  |Set'(Var'(VarFree(v)), exp) -> (generate consts fvars exp) ^ "\n"^ "mov qword [fvar_tbl+" ^ string_of_int (List.assoc v fvars) ^"], rax" ^"\n" ^ "mov rax, sob_void"
+  |Def'(Var'(VarFree(v)), exp)-> (generate consts fvars exp) ^ "\n"^ "mov qword [fvar_tbl+" ^ string_of_int (List.assoc v fvars) ^"], rax" ^"\n" ^ "mov rax, sob_void"
+  (*| Or'(expr_list)->
   | LambdaSimple'(params, expr)->
   | LambdaOpt'(params, optional, expr)->
   | Applic'(closure, args)-> 
   | ApplicTP'(closure, args)->*)
-  |_ -> "1"  ;;
+  |_-> "";;
 end;;
 

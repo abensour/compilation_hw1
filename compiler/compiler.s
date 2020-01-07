@@ -627,6 +627,7 @@ write_sob:
 	mov rbx, 0
 	mov bl, byte [rsi]	
 	jmp qword [.jmp_table + rbx * 8]
+	
 
 section .data
 .jmp_table:
