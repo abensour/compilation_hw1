@@ -87,9 +87,9 @@ module Code_Gen = struct
   |Sexpr(Number(Float(num))) -> ( (const, (offset, "MAKE_LITERAL_FLOAT(" ^ (string_of_float num) ^")")), 9)
   |Sexpr(Char(c)) -> ( (const, (offset, "MAKE_LITERAL_CHAR("^ (Char.escaped c) ^")")), 2)
   |Sexpr(String(str)) -> ( (const, (offset, " MAKE_LITERAL_STRING(\" "^ str ^" \")")), (String.length str) + 9) (*to check!*)
-  |Sexpr(Symbol(str)) -> ( (const, (offset, " MAKE_LITERAL_SYMBOL(consts+ "^ (string_of_int (get_const_address table (Sexpr(String(str))))) ^")")), 9)
-  |Sexpr(Pair(sexpr1, sexpr2)) -> ( (const, (offset, " MAKE_LITERAL_PAIR(consts+ "^ (string_of_int (get_const_address table (Sexpr(sexpr1)))) ^"
-  , consts+" ^ (string_of_int (get_const_address table (Sexpr(sexpr2)))) ^")")), 17)
+  |Sexpr(Symbol(str)) -> ( (const, (offset, " MAKE_LITERAL_SYMBOL(const_tbl+ "^ (string_of_int (get_const_address table (Sexpr(String(str))))) ^")")), 9)
+  |Sexpr(Pair(sexpr1, sexpr2)) -> ( (const, (offset, " MAKE_LITERAL_PAIR(const_tbl+ "^ (string_of_int (get_const_address table (Sexpr(sexpr1)))) ^"
+  , const_tbl+" ^ (string_of_int (get_const_address table (Sexpr(sexpr2)))) ^")")), 17)
   |Sexpr(TagRef(name)) -> ((const, (offset, "")) , 0)
   |_-> raise X_this_should_not_happen;;
   
@@ -102,9 +102,9 @@ module Code_Gen = struct
   |Sexpr(Number(Float(num))) -> ( (const, (offset, "MAKE_LITERAL_FLOAT(" ^ (string_of_float num) ^")")), 9)
   |Sexpr(Char(c)) -> ( (const, (offset, "MAKE_LITERAL_CHAR("^ (Char.escaped c) ^")")), 2)
   |Sexpr(String(str)) -> ( (const, (offset, " MAKE_LITERAL_STRING(\" "^ str ^" \")")), (String.length str) + 9) (*to check!*)
-  |Sexpr(Symbol(str)) -> ( (const, (offset, " MAKE_LITERAL_SYMBOL(consts+ "^ (string_of_int (get_const_address_iter_2 table (Sexpr(String(str))))) ^")")), 9)
-  |Sexpr(Pair(sexpr1, sexpr2)) ->  ( (const, (offset, " MAKE_LITERAL_PAIR(consts+ "^ (string_of_int (get_const_address_iter_2 table (Sexpr(sexpr1)))) ^"
-  , consts+" ^ (string_of_int (get_const_address_iter_2 table (Sexpr(sexpr2)))) ^")")), 17)
+  |Sexpr(Symbol(str)) -> ( (const, (offset, " MAKE_LITERAL_SYMBOL(const_tbl+ "^ (string_of_int (get_const_address_iter_2 table (Sexpr(String(str))))) ^")")), 9)
+  |Sexpr(Pair(sexpr1, sexpr2)) ->  ( (const, (offset, " MAKE_LITERAL_PAIR(const_tbl+ "^ (string_of_int (get_const_address_iter_2 table (Sexpr(sexpr1)))) ^"
+  , const_tbl+" ^ (string_of_int (get_const_address_iter_2 table (Sexpr(sexpr2)))) ^")")), 17)
   |Sexpr(TagRef(name)) -> ((const, (offset, "")) , 0)
   |_ -> raise X_this_should_not_happen;;
   
@@ -225,9 +225,27 @@ let gen_fvars_table asts = let fvars_list = List.fold_left (fun acclist exp' -> 
 let fvars_set = reduce_list_str (primitive_names@fvars_list) in 
 let (fvars_table,_) = List.fold_left (fun (acclist,indx) str -> ((acclist @ [(str,indx)]),( indx + 1))) ([],0) fvars_set in fvars_table;;
 
-
-
   let make_fvars_tbl asts = gen_fvars_table asts;;
-  let generate consts fvars e = raise X_not_yet_implemented;;
+
+
+  let get_address_in_const_table constant consts_table = 
+    "const_tbl+" ^ (string_of_int (get_const_address consts_table constant));;
+
+  let generate consts fvars e = match e with
+  | Const'(constant)->  "mov rax, " ^ (get_address_in_const_table constant consts)
+  (*| Var'(var) ->
+  | Box'(var) ->
+  | BoxGet'(var)->
+  | BoxSet'(var, expr)->
+  | If'(test, dit, dif) ->
+  | Seq'(expr_list)->
+  | Set'(expr1, expr2)->
+  | Def'(expr1, expr2)->
+  | Or'(expr_list)->
+  | LambdaSimple'(params, expr)->
+  | LambdaOpt'(params, optional, expr)->
+  | Applic'(closure, args)-> 
+  | ApplicTP'(closure, args)->*)
+  |_ -> "1"  ;;
 end;;
 

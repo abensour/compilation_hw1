@@ -119,6 +119,19 @@
 	sub %1, WORD_SIZE+TYPE_SIZE
 %endmacro
 
+;Make a literal of type %1
+;followed by the definition %2
+%macro MAKE_LITERAL 2
+	db %1
+	%2
+%endmacro
+%define MAKE_LITERAL_INT(val) MAKE_LITERAL T_INTEGER, dq val
+%define MAKE_LITERAL_FLOAT(val) MAKE_LITERAL T_FLOAT, dq val
+%define MAKE_LITERAL_CHAR(val) MAKE_LITERAL T_CHAR, db val
+%define MAKE_NIL db T_NIL
+%define MAKE_VOID db T_VOID
+%define MAKE_BOOL(val) MAKE_LITERAL T_BOOL, db val
+
 ;;; Creates a SOB with tag %2 
 ;;; from two pointers %3 and %4
 ;;; Stores result in register %1
