@@ -54,14 +54,14 @@ module Code_Gen = struct
     |_-> [const];;
 
   let exists curr_const consts_list = 
-    List.fold_right (fun curr acc -> 
+    List.fold_left (fun acc curr -> 
     match curr, curr_const with
     |Sexpr(sexp1), Sexpr(sexp2) -> if (sexpr_eq sexp1 sexp2) then true else acc
     |Void , Void ->  true
-    |_,_-> acc) consts_list false;;
+    |_,_-> acc) false consts_list;;
   
   let reduce_list l = 
-    List.fold_right (fun curr acc -> if(exists curr acc) then acc else curr::acc) l [];;
+    List.fold_left (fun  acc curr -> if(exists curr acc) then acc else acc@[curr]) [] l;;
 
   let get_const_address table const = 
   List.fold_left (fun acc (curr_const, (offset, string))-> match curr_const, const with 
@@ -179,8 +179,8 @@ let check string =
   let must_const = [Void ;Sexpr(Nil); Sexpr(Bool false) ; Sexpr(Bool true)] in
   let list_of_consts = List.flatten (List.map make_list_of_all_consts ast_without_tagggedSexpr) in
   let extended_list = must_const @ List.flatten (List.map extend_consts_table list_of_consts) in
-  let reduce_list = reduce_list extended_list in
-  let table_1 = build_consts_table reduce_list in build_consts_table_iter_2 table_1;;
+  let reduced = reduce_list extended_list in
+  let table_1 = build_consts_table reduced in build_consts_table_iter_2 table_1;;
 
 
   let make_consts_tbl asts = 
@@ -189,8 +189,8 @@ let check string =
   let must_const = [Void ;Sexpr(Nil); Sexpr(Bool false) ; Sexpr(Bool true)] in
   let list_of_consts = List.flatten (List.map make_list_of_all_consts ast_without_tagggedSexpr) in
   let extended_list = must_const @ List.flatten (List.map extend_consts_table list_of_consts) in
-  let reduce_list = reduce_list extended_list in
-  let table_1 = build_consts_table reduce_list in build_consts_table_iter_2 table_1;; 
+  let reduced = reduce_list extended_list in
+  let table_1 = build_consts_table reduced in build_consts_table_iter_2 table_1;; 
 
 let exists_str curr_const consts_list = 
   List.fold_left (fun acc curr -> if (curr = curr_const) then true else acc) false consts_list;;
