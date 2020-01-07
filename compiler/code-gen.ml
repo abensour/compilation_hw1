@@ -150,7 +150,7 @@ let rec rename_reffs exp' indx = match exp' with
 let rec remove_tagged const  =
  match const with 
   | Pair(car_const, cdr_const) -> Pair((remove_tagged car_const ), (remove_tagged cdr_const ))
-  | TaggedSexpr(string, sexpr) -> let () = pList.pairsL <- (string,sexpr) :: pList.pairsL in remove_tagged sexpr
+  | TaggedSexpr(string, sexpr) -> let expr = remove_tagged sexpr in let () = pList.pairsL <- (string,expr) :: pList.pairsL in expr
   |_-> const;;
 
 let rec build_dictionary_and_remove_tagges exp' =
@@ -168,23 +168,11 @@ match exp' with
   | ApplicTP'(closure, params)-> Applic'(build_dictionary_and_remove_tagges closure , (List.map (fun exp -> build_dictionary_and_remove_tagges exp ) params)) 
   | _ -> exp';;
 
-let check string = 
-  let string_to_asts s = List.map Semantics.run_semantics
-                         (Tag_Parser.tag_parse_expressions
-                            (Reader.read_sexprs s)) 
-  in
-  let asts = string_to_asts string in 
-  let (asts_renamed,length) =  List.fold_left (fun (accList,indx) exp' -> (accList @ [(rename_reffs exp' indx)] , indx +1 )) ([],0) asts in
-  let ast_without_tagggedSexpr =List.fold_left (fun accList curr -> accList @ [build_dictionary_and_remove_tagges curr]) [] asts_renamed in 
-  let must_const = [Void ;Sexpr(Nil); Sexpr(Bool false) ; Sexpr(Bool true)] in
-  let list_of_consts = List.flatten (List.map make_list_of_all_consts ast_without_tagggedSexpr) in
-  let extended_list = must_const @ List.flatten (List.map extend_consts_table list_of_consts) in
-  let reduced = reduce_list extended_list in
-  let table_1 = build_consts_table reduced in build_consts_table_iter_2 ;;
-
+let rename_ast asts =
+  let (asts_renamed,_) =  List.fold_left (fun (accList,indx) exp' -> (accList @ [(rename_reffs exp' indx)] , indx +1 )) ([],0) asts in 
+  asts_renamed;;
 
   let make_consts_tbl asts = 
-  let (asts_renamed,length) =  List.fold_left (fun (accList,indx) exp' -> (accList @ [(rename_reffs exp' indx)] , indx +1 )) ([],0) asts in
   let ast_without_tagggedSexpr =List.fold_left (fun accList curr -> accList @ [build_dictionary_and_remove_tagges curr]) [] asts_renamed in 
   let must_const = [Void ;Sexpr(Nil); Sexpr(Bool false) ; Sexpr(Bool true)] in
   let list_of_consts = List.flatten (List.map make_list_of_all_consts ast_without_tagggedSexpr) in
