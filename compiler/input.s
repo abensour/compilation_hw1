@@ -15,6 +15,9 @@ MAKE_NIL
 MAKE_BOOL(0)
 MAKE_BOOL(1)
 MAKE_LITERAL_INT(1)
+MAKE_LITERAL_INT(2)
+MAKE_LITERAL_INT(3)
+MAKE_LITERAL_INT(4)
 
 ;;; These macro definitions are required for the primitive
 ;;; definitions in the epilogue to work properly
@@ -126,7 +129,24 @@ user_code_fragment:
 ;;; It will be executed immediately after the closures for 
 ;;; the primitive procedures are set up.
 
+mov rax, const_tbl+4
+cmp rax, SOB_FALSE_ADDRESS
+je Lelse0
 mov rax, const_tbl+6
+jmp Lexit0
+Lelse0:
+mov rax, const_tbl+15
+Lexit0:
+	call write_sob_if_not_void
+
+mov rax, const_tbl+2
+cmp rax, SOB_FALSE_ADDRESS
+je Lelse1
+mov rax, const_tbl+24
+jmp Lexit1
+Lelse1:
+mov rax, const_tbl+33
+Lexit1:
 	call write_sob_if_not_void
 
 	mov rax, 0

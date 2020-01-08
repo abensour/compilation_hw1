@@ -173,7 +173,7 @@ let rename_ast asts =
   asts_renamed;;
 
   let make_consts_tbl asts = 
-  let ast_without_tagggedSexpr =List.fold_left (fun accList curr -> accList @ [build_dictionary_and_remove_tagges curr]) [] asts_renamed in 
+  let ast_without_tagggedSexpr =List.fold_left (fun accList curr -> accList @ [build_dictionary_and_remove_tagges curr]) [] asts in 
   let must_const = [Void ;Sexpr(Nil); Sexpr(Bool false) ; Sexpr(Bool true)] in
   let list_of_consts = List.flatten (List.map make_list_of_all_consts ast_without_tagggedSexpr) in
   let extended_list = must_const @ List.flatten (List.map extend_consts_table list_of_consts) in
@@ -231,9 +231,9 @@ let (fvars_table,_) = List.fold_left (fun (acclist,indx) str -> ((acclist @ [(st
   | Var'(VarFree(name)) -> "mov rax, qword [fvar_tbl+" ^  (string_of_int (List.assoc name fvars)) ^ "]"
   | BoxGet'(v)-> (generate consts fvars (Var'(v))) ^ "\n" ^ "mov rax, qword [rax]"
   | BoxSet'(v, exp)-> (generate consts fvars exp) ^ "\npush rax" ^ (generate consts fvars (Var'(v))) ^ "\npop qword [rax] \nmov rax, sob_void"
-  | If'(test, dit, dif) -> let str =  (generate consts fvars test) ^ "\n" ^ "cmp rax, sob_false" ^ "\n" ^ "je Lelse" ^ (string_of_int label_index.index)^  "\n"
-  ^ (generate consts fvars dit) ^"\n" ^ "jmp Lexit" ^ (string_of_int label_index.index) ^ "\n" ^ "Lelse" ^ (string_of_int label_index.index) ^":\n" ^ (generate consts fvars dit) 
-  ^ "Lexit" ^(string_of_int label_index.index) ^ ":" in let () = label_index.index <- label_index.index + 1 in str 
+  | If'(test, dit, dif) -> let str =  (generate consts fvars test) ^ "\n" ^ "cmp rax, SOB_FALSE_ADDRESS" ^ "\n" ^ "je Lelse" ^ (string_of_int label_index.index)^  "\n"
+  ^ (generate consts fvars dit) ^"\n" ^ "jmp Lexit" ^ (string_of_int label_index.index) ^ "\n" ^ "Lelse" ^ (string_of_int label_index.index) ^":\n" ^ (generate consts fvars dif) 
+  ^ "\nLexit" ^(string_of_int label_index.index) ^ ":" in let () = label_index.index <- label_index.index + 1 in str 
   | Seq'(expr_list)-> List.fold_left (fun acc curr ->  acc ^ "\n" ^ (generate consts fvars curr)) "" expr_list 
   | Set'(Var'(VarParam(_, minor)), exp)-> (generate consts fvars exp) ^ "\n"^
   "mov qword [rbp + 8*(4+ " ^ (string_of_int minor) ^ ")], rax" ^"\n"^ 
@@ -242,8 +242,8 @@ let (fvars_table,_) = List.fold_left (fun (acclist,indx) str -> ((acclist @ [(st
   "mov qword [rbx + 8*" ^ (string_of_int minor) ^ "], rax"^  "\n"^ "mov rax, sob_void"
   |Set'(Var'(VarFree(v)), exp) -> (generate consts fvars exp) ^ "\n"^ "mov qword [fvar_tbl+" ^ string_of_int (List.assoc v fvars) ^"], rax" ^"\n" ^ "mov rax, sob_void"
   |Def'(Var'(VarFree(v)), exp)-> (generate consts fvars exp) ^ "\n"^ "mov qword [fvar_tbl+" ^ string_of_int (List.assoc v fvars) ^"], rax" ^"\n" ^ "mov rax, sob_void"
-  | Or'(expr_list)-> let all_orrs = List.fold_left (fun accList curexp' ->let str = (generate const fvars curexp') ^ "cmp rax, sob_false \n jne Lexit" ^ (string_of_int label_index.index) in  accList ^ str ) "" expr_list 
-  in let fin_str = all_orrs ^ "Lexit" ^(string_of_int label_index.index) ^ ":" in let () = label_index.index <- label_index.index + 1 in fin_str 
+  | Or'(expr_list)-> let all_orrs = List.fold_left (fun accList curexp -> accList ^ (generate consts fvars curexp) ^ "cmp rax, SOB_FALSE_ADDRESS \n jne Lexit" ^ (string_of_int label_index.index)) "" expr_list 
+  in let fin_str = all_orrs ^ "\nLexit" ^(string_of_int label_index.index) ^ ":" in let () = label_index.index <- label_index.index + 1 in fin_str 
   (*| LambdaSimple'(params, expr)->
   | LambdaOpt'(params, optional, expr)->
   | Applic'(closure, args)-> 
