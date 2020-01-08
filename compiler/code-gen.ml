@@ -228,21 +228,21 @@ let (fvars_table,_) = List.fold_left (fun (acclist,indx) str -> ((acclist @ [(st
  "mov rbx, [rbp + 8*2] ;;rbx = address of env
 mov rcx, 0 ;;counter for size of env
 count_env_length" ^ str_index ^":
-    cmp [rbx], SOB_NIL_ADDRESS
+    cmp qword [rbx], SOB_NIL_ADDRESS
     je end_count_env_length" ^ str_index ^"
     add rbx, 8
     add rcx, 1 
     jmp count_env_length" ^ str_index ^"
-end_count_length" ^ str_index ^": 
+end_count_env_length" ^ str_index ^": 
     push rcx
     add rcx,1 ;;size of extent env 
-    mul rcx, 8
+    shl rcx, 3 ;;mul rcx*8
     MALLOC rax, rcx 
     pop rcx ;;env size 
     mov rbx, [rbp + 8*2] 
 ;;rbx is oldenv adrees and rax is extenvadrees
-    mov rsi 0 ;;i
-    mov rdi 1 ;;j
+    mov rsi, 0 ;;i
+    mov rdi, 1 ;;j
 copy_old_env" ^ str_index ^":
     cmp rsi, rcx
     je end_copy_old_env" ^ str_index ^" 
@@ -256,7 +256,7 @@ end_copy_old_env" ^ str_index ^":
     mov rdx, [rbp + 8*3]
     push rax
     push rdx 
-    mul rdx, 8
+    shl rdx, 3 ;;mul rdx*8
     MALLOC rbx, rdx ;;rbx is address of ExtEnv[0]
     pop rax ;;address of ExtEnv
     pop rdx ;;number of params 
@@ -267,7 +267,7 @@ compy_params" ^ str_index ^":
     cmp rcx, rdx 
     je end_copy_params" ^ str_index ^" 
     mov rsi, rcx 
-    mul rsi, 8 ;;for param number rcx 
+    shl rsi, 3 ;;for param number rcx  = mul rsi*8
     add rsi, 4*8 ;;for the zeroth param
     add rsi, rbp 
     ;;[rbp + 4*8 + rcx*8]
@@ -281,8 +281,8 @@ end_copy_params" ^ str_index ^":
     jmp Lcont" ^ str_index ^" 
 Lcode" ^ str_index ^":
     push rbp
-    mov rbp, rsp " ^ generated_body ^
- "  leave
+    mov rbp, rsp \n"^ generated_body ^
+ "\nleave
     ret 
 Lcont" ^ str_index ^":";;
 
