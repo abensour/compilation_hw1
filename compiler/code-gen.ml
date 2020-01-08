@@ -242,8 +242,9 @@ let (fvars_table,_) = List.fold_left (fun (acclist,indx) str -> ((acclist @ [(st
   "mov qword [rbx + 8*" ^ (string_of_int minor) ^ "], rax"^  "\n"^ "mov rax, sob_void"
   |Set'(Var'(VarFree(v)), exp) -> (generate consts fvars exp) ^ "\n"^ "mov qword [fvar_tbl+" ^ string_of_int (List.assoc v fvars) ^"], rax" ^"\n" ^ "mov rax, sob_void"
   |Def'(Var'(VarFree(v)), exp)-> (generate consts fvars exp) ^ "\n"^ "mov qword [fvar_tbl+" ^ string_of_int (List.assoc v fvars) ^"], rax" ^"\n" ^ "mov rax, sob_void"
-  (*| Or'(expr_list)->
-  | LambdaSimple'(params, expr)->
+  | Or'(expr_list)-> let all_orrs = List.fold_left (fun accList curexp' ->let str = (generate const fvars curexp') ^ "cmp rax, sob_false \n jne Lexit" ^ (string_of_int label_index.index) in  accList ^ str ) "" expr_list 
+  in let fin_str = all_orrs ^ "Lexit" ^(string_of_int label_index.index) ^ ":" in let () = label_index.index <- label_index.index + 1 in fin_str 
+  (*| LambdaSimple'(params, expr)->
   | LambdaOpt'(params, optional, expr)->
   | Applic'(closure, args)-> 
   | ApplicTP'(closure, args)->*)
