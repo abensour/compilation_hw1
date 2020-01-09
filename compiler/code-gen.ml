@@ -228,7 +228,7 @@ let (fvars_table,_) = List.fold_left (fun (acclist,indx) str -> ((acclist @ [(st
  "mov rbx, [rbp + 8*2] ;;rbx = address of env
 mov rcx, 0 ;;counter for size of env
 count_env_length" ^ str_index ^":
-    cmp qword [rbx], SOB_NIL_ADDRESS
+    cmp qword rbx, SOB_NIL_ADDRESS
     je end_count_env_length" ^ str_index ^"
     add rbx, 8
     add rcx, 1 
@@ -258,8 +258,8 @@ end_copy_old_env" ^ str_index ^":
     push rdx 
     shl rdx, 3 ;;mul rdx*8
     MALLOC rbx, rdx ;;rbx is address of ExtEnv[0]
-    pop rax ;;address of ExtEnv
     pop rdx ;;number of params 
+    pop rax ;;address of ExtEnv
     mov [rax], rbx  ;;put ExtEnv[0] address in ExtEnv Vector 
 ;;rbx is the pointer to the extenv[0] and rdx number of params 
     mov rcx,0
