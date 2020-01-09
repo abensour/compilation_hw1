@@ -224,7 +224,7 @@ let (fvars_table,_) = List.fold_left (fun (acclist,indx) str -> ((acclist @ [(st
   type mutable_int = {mutable index:int};; 
   let label_index = {index = 0};;
 
-  let generate_lambda_simple generated_body str_index= 
+  let generate_lambda str_index= 
  "mov rbx, [rbp + 8*2] ;;rbx = address of env
 mov rcx, 0 ;;counter for size of env
 count_env_length" ^ str_index ^":
@@ -278,8 +278,10 @@ compy_params" ^ str_index ^":
 end_copy_params" ^ str_index ^":
     mov rbx, rax 
     MAKE_CLOSURE(rax, rbx ,Lcode" ^ str_index ^") 
-    jmp Lcont" ^ str_index ^" 
-Lcode" ^ str_index ^":
+    jmp Lcont" ^ str_index ;;
+
+let genarate_simple_body generated_body str_index =
+"\nLcode" ^ str_index ^":
     push rbp
     mov rbp, rsp \n"^ generated_body ^
  "\nleave
@@ -306,7 +308,8 @@ Lcont" ^ str_index ^":";;
   |Def'(Var'(VarFree(v)), exp)-> (generate consts fvars exp) ^ "\n"^ "mov qword [fvar_tbl+" ^ string_of_int (List.assoc v fvars) ^"], rax" ^"\n" ^ "mov rax, sob_void"
   | Or'(expr_list)-> let all_orrs = List.fold_left (fun accList curexp -> accList ^ (generate consts fvars curexp) ^ "cmp rax, SOB_FALSE_ADDRESS \n jne Lexit" ^ (string_of_int label_index.index)) "" expr_list 
   in let fin_str = all_orrs ^ "\nLexit" ^(string_of_int label_index.index) ^ ":" in let () = label_index.index <- label_index.index + 1 in fin_str 
-  | LambdaSimple'(params, expr)-> let generated_body = (generate consts fvars expr) in generate_lambda_simple generated_body (string_of_int label_index.index)
+  | LambdaSimple'(params, expr)-> let generated_body = (generate consts fvars expr) in let lambda_code = generate_lambda (string_of_int label_index.index) in let fin_str = lambda_code ^ (genarate_simple_body generated_body (string_of_int label_index.index))
+  in let () = label_index.index <- label_index.index + 1 in fin_str
   (*| LambdaOpt'(params, optional, expr)->
   | Applic'(closure, args)-> 
   | ApplicTP'(closure, args)->*)
