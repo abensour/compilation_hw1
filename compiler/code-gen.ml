@@ -213,20 +213,19 @@ let gen_fvars_table asts = let fvars_list = List.fold_left (fun acclist exp' -> 
 let fvars_set = reduce_list_str (primitive_names@fvars_list) in 
 let (fvars_table,_) = List.fold_left (fun (acclist,indx) str -> ((acclist @ [(str,indx)]),( indx + 1))) ([],0) fvars_set in fvars_table;;
 
-  let make_fvars_tbl asts = gen_fvars_table asts;;
+let make_fvars_tbl asts = gen_fvars_table asts;;
 
 
-  let get_address_in_const_table constant consts_table = 
-    "const_tbl+" ^ (string_of_int (get_const_address consts_table constant));;
+let get_address_in_const_table constant consts_table =  "const_tbl+" ^ (string_of_int (get_const_address consts_table constant));;
 
 
 
-  type mutable_int = {mutable index:int};; 
-  let label_index = {index = 0};;
+type mutable_int = {mutable index:int};; 
+let label_index = {index = 0};;
 
-  let generate_lambda str_index= 
+let generate_lambda str_index= 
  "mov rbx, [rbp + 8*2] ;;rbx = address of env
-mov rcx, 0 ;;counter for size of env
+  mov rcx, 0 ;;counter for size of env
 count_env_length" ^ str_index ^":
     cmp qword rbx, SOB_NIL_ADDRESS
     je end_count_env_length" ^ str_index ^"
@@ -288,31 +287,51 @@ let genarate_simple_body generated_body str_index =
     ret 
 Lcont" ^ str_index ^":";;
 
+let magic = "push qword 12345678\n";;
+let call_function_and_return =   
+   "cmp byte [rax], T_CLOSURE \n
+   jne L_total_exit
+   CLOSURE_ENV rbx, rax
+   push rbx 
+   CLOSURE_CODE rbx, rax
+   call rbx
+   ;;after returning 
+   add rsp, 8 ;;pop env
+   pop rbx ;;rbx = number of args
+   shl rbx, 3 ;; rbx = rbx*8
+   add rsp, rbx ;;pop args
+   add rsp, 8 ;;pop magic";;
+
   let rec generate consts fvars e = match e with
   | Const'(constant)->  "mov rax, " ^ (get_address_in_const_table constant consts)
   | Var'(VarParam(_,minor)) -> "mov rax, qword [rbp + 8 * (4 + " ^ string_of_int minor ^ ")]"
   | Var'(VarBound(_,major,minor)) -> "mov rax, qword [rbp + 8 ∗ 2] \n mov rax, qword [rax + 8 ∗ " ^ string_of_int major ^"] \n mov rax, qword [rax + 8 ∗" ^ string_of_int minor ^ "]"  
-  | Var'(VarFree(name)) -> "mov rax, qword [fvar_tbl+" ^  (string_of_int (List.assoc name fvars)) ^ "]"
+  | Var'(VarFree(name)) -> "mov rax, qword [fvar_tbl+" ^  (string_of_int (List.assoc name fvars))^"]" 
   | BoxGet'(v)-> (generate consts fvars (Var'(v))) ^ "\n" ^ "mov rax, qword [rax]"
-  | BoxSet'(v, exp)-> (generate consts fvars exp) ^ "\npush rax" ^ (generate consts fvars (Var'(v))) ^ "\npop qword [rax] \nmov rax, sob_void"
+  | BoxSet'(v, exp)-> (generate consts fvars exp) ^ "\npush rax" ^ (generate consts fvars (Var'(v))) ^ "\npop qword [rax] \nmov rax, SOB_VOID_ADDRESS"
   | If'(test, dit, dif) -> let str =  (generate consts fvars test) ^ "\n" ^ "cmp rax, SOB_FALSE_ADDRESS" ^ "\n" ^ "je Lelse" ^ (string_of_int label_index.index)^  "\n"
   ^ (generate consts fvars dit) ^"\n" ^ "jmp Lexit" ^ (string_of_int label_index.index) ^ "\n" ^ "Lelse" ^ (string_of_int label_index.index) ^":\n" ^ (generate consts fvars dif) 
   ^ "\nLexit" ^(string_of_int label_index.index) ^ ":" in let () = label_index.index <- label_index.index + 1 in str 
   | Seq'(expr_list)-> List.fold_left (fun acc curr ->  acc ^ "\n" ^ (generate consts fvars curr)) "" expr_list 
   | Set'(Var'(VarParam(_, minor)), exp)-> (generate consts fvars exp) ^ "\n"^
   "mov qword [rbp + 8*(4+ " ^ (string_of_int minor) ^ ")], rax" ^"\n"^ 
-  "mov rax, sob_void"
+  "mov rax, SOB_VOID_ADDRESS"
   |Set'(Var'(VarBound(_,major,minor)), exp) -> (generate consts fvars exp) ^ "\n"^ "mov rbx, qword [rbp + 8*2]" ^ "\n" ^ "mov rbx, qword [rbp + 8*" ^ (string_of_int major) ^ "]" ^ "\n" ^
-  "mov qword [rbx + 8*" ^ (string_of_int minor) ^ "], rax"^  "\n"^ "mov rax, sob_void"
-  |Set'(Var'(VarFree(v)), exp) -> (generate consts fvars exp) ^ "\n"^ "mov qword [fvar_tbl+" ^ string_of_int (List.assoc v fvars) ^"], rax" ^"\n" ^ "mov rax, sob_void"
-  |Def'(Var'(VarFree(v)), exp)-> (generate consts fvars exp) ^ "\n"^ "mov qword [fvar_tbl+" ^ string_of_int (List.assoc v fvars) ^"], rax" ^"\n" ^ "mov rax, sob_void"
+  "mov qword [rbx + 8*" ^ (string_of_int minor) ^ "], rax"^  "\n"^ "mov rax, SOB_VOID_ADDRESS"
+  |Set'(Var'(VarFree(v)), exp) -> (generate consts fvars exp) ^ "\n"^ "mov qword [fvar_tbl+" ^ string_of_int (List.assoc v fvars) ^"], rax" ^"\n" ^ "mov rax, SOB_VOID_ADDRESS"
+  |Def'(Var'(VarFree(v)), exp)-> (generate consts fvars exp) ^ "\n"^ "mov qword [fvar_tbl+" ^ string_of_int (List.assoc v fvars) ^"], rax" ^"\n" ^ "mov rax, SOB_VOID_ADDRESS"
   | Or'(expr_list)-> let all_orrs = List.fold_left (fun accList curexp -> accList ^ (generate consts fvars curexp) ^ "cmp rax, SOB_FALSE_ADDRESS \n jne Lexit" ^ (string_of_int label_index.index)) "" expr_list 
   in let fin_str = all_orrs ^ "\nLexit" ^(string_of_int label_index.index) ^ ":" in let () = label_index.index <- label_index.index + 1 in fin_str 
   | LambdaSimple'(params, expr)-> let generated_body = (generate consts fvars expr) in let lambda_code = generate_lambda (string_of_int label_index.index) in let fin_str = lambda_code ^ (genarate_simple_body generated_body (string_of_int label_index.index))
   in let () = label_index.index <- label_index.index + 1 in fin_str
   (*| LambdaOpt'(params, optional, expr)->
-  | Applic'(closure, args)-> 
-  | ApplicTP'(closure, args)->*)
+  *)| Applic'(closure, args)-> let push_args_string = List.fold_right (fun curr acc -> acc ^ (generate consts fvars curr)^ "\n"^"push rax\n") args "" in
+                               let n = "push " ^(string_of_int (List.length args))^"\n" in 
+                               magic ^ push_args_string ^ n ^ (generate consts fvars closure) ^"\n"^ call_function_and_return
+
+
+  (*| ApplicTP'(closure, args)->*)
   |_-> "";;
+  
 end;;
 

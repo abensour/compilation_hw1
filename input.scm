@@ -1,1 +1,1 @@
-(lambda (x) x)
+(boolean? #t)

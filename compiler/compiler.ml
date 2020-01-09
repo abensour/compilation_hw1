@@ -111,6 +111,7 @@ try
                         (List.map
                            (fun ast -> (generate ast) ^ "\n\tcall write_sob_if_not_void")
                            asts) in
+  let code_fragment = code_fragment ^ "\nL_total_exit: ;;add index!!!!!!!!!!!!!!" (*check this!!!*) in
   (* clean_exit contains instructions to clean the dummy stack
      and return exit code 0 ("all's well") from procedure main. *)
   let clean_exit = "\n\n\tmov rax, 0\n\tadd rsp, 4*8\n\tpop rbp\n\tret\n\n" in
