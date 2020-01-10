@@ -14,6 +14,8 @@ MAKE_VOID
 MAKE_NIL
 MAKE_BOOL(0)
 MAKE_BOOL(1)
+MAKE_LITERAL_STRING("helloooo")
+MAKE_LITERAL_SYMBOL(const_tbl+ 6)
 
 ;;; These macro definitions are required for the primitive
 ;;; definitions in the epilogue to work properly
@@ -74,75 +76,58 @@ main:
     ;; This is where we emulate the missing (define ...) expressions
     ;; for all the primitive procedures.
     MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, is_boolean)
-    mov [fvar_tbl+22], rax
-    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, is_float)
     mov [fvar_tbl+0], rax
-    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, is_integer)
+    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, is_float)
     mov [fvar_tbl+1], rax
-    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, is_pair)
+    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, is_integer)
     mov [fvar_tbl+2], rax
-    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, is_null)
+    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, is_pair)
     mov [fvar_tbl+3], rax
-    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, is_char)
+    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, is_null)
     mov [fvar_tbl+4], rax
-    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, is_string)
+    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, is_char)
     mov [fvar_tbl+5], rax
-    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, is_procedure)
+    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, is_string)
     mov [fvar_tbl+6], rax
-    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, is_symbol)
+    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, is_procedure)
     mov [fvar_tbl+7], rax
-    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, string_length)
+    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, is_symbol)
     mov [fvar_tbl+8], rax
-    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, string_ref)
+    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, string_length)
     mov [fvar_tbl+9], rax
-    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, string_set)
+    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, string_ref)
     mov [fvar_tbl+10], rax
-    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, make_string)
+    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, string_set)
     mov [fvar_tbl+11], rax
-    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, symbol_to_string)
+    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, make_string)
     mov [fvar_tbl+12], rax
-    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, char_to_integer)
+    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, symbol_to_string)
     mov [fvar_tbl+13], rax
-    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, integer_to_char)
+    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, char_to_integer)
     mov [fvar_tbl+14], rax
-    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, is_eq)
+    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, integer_to_char)
     mov [fvar_tbl+15], rax
-    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, bin_add)
+    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, is_eq)
     mov [fvar_tbl+16], rax
-    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, bin_mul)
+    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, bin_add)
     mov [fvar_tbl+17], rax
-    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, bin_sub)
+    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, bin_mul)
     mov [fvar_tbl+18], rax
-    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, bin_div)
+    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, bin_sub)
     mov [fvar_tbl+19], rax
-    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, bin_lt)
+    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, bin_div)
     mov [fvar_tbl+20], rax
-    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, bin_equ)
+    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, bin_lt)
     mov [fvar_tbl+21], rax
+    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, bin_equ)
+    mov [fvar_tbl+22], rax
 
 user_code_fragment:
 ;;; The code you compiled will be catenated here.
 ;;; It will be executed immediately after the closures for 
 ;;; the primitive procedures are set up.
 
-push qword 12345678
-mov rax, const_tbl+4
-push rax
-push 1
-mov rax, qword [fvar_tbl+22]
-cmp byte [rax], T_CLOSURE 
-
-   jne L_total_exit
-   CLOSURE_ENV rbx, rax
-   push rbx 
-   CLOSURE_CODE rbx, rax
-   call rbx
-   ;;after returning 
-   add rsp, 8 ;;pop env
-   pop rbx ;;rbx = number of args
-   shl rbx, 3 ;; rbx = rbx*8
-   add rsp, rbx ;;pop args
-   add rsp, 8 ;;pop magic
+mov rax, const_tbl+23
 	call write_sob_if_not_void
 L_total_exit: ;;add index!!!!!!!!!!!!!!
 

@@ -125,12 +125,22 @@
 	db %1
 	%2
 %endmacro
+
+%macro MAKE_LITERAL_STRING 1
+	db T_STRING
+	dq (%%end_str - %%str)
+%%str:
+	db %1
+%%end_str:
+%endmacro
+
 %define MAKE_LITERAL_INT(val) MAKE_LITERAL T_INTEGER, dq val
 %define MAKE_LITERAL_FLOAT(val) MAKE_LITERAL T_FLOAT, dq val
 %define MAKE_LITERAL_CHAR(val) MAKE_LITERAL T_CHAR, db val
 %define MAKE_NIL db T_NIL
 %define MAKE_VOID db T_VOID
 %define MAKE_BOOL(val) MAKE_LITERAL T_BOOL, db val
+%define MAKE_LITERAL_SYMBOL(val) MAKE_LITERAL T_SYMBOL , dq val
 
 ;;; Creates a SOB with tag %2 
 ;;; from two pointers %3 and %4

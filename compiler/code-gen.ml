@@ -86,7 +86,7 @@ module Code_Gen = struct
   |Sexpr(Number(Int(num))) -> ( (const, (offset, "MAKE_LITERAL_INT(" ^ (string_of_int num) ^")")), 9)
   |Sexpr(Number(Float(num))) -> ( (const, (offset, "MAKE_LITERAL_FLOAT(" ^ (string_of_float num) ^")")), 9)
   |Sexpr(Char(c)) -> ( (const, (offset, "MAKE_LITERAL_CHAR("^ (Char.escaped c) ^")")), 2)
-  |Sexpr(String(str)) -> ( (const, (offset, " MAKE_LITERAL_STRING(\" "^ str ^" \")")), (String.length str) + 9) (*to check!*)
+  |Sexpr(String(str)) -> ( (const, (offset, "MAKE_LITERAL_STRING(\""^ str ^"\")")), (String.length str) + 9) (*to check!*)
   |Sexpr(Symbol(str)) -> ( (const, (offset, " MAKE_LITERAL_SYMBOL(const_tbl+ "^ (string_of_int (get_const_address table (Sexpr(String(str))))) ^")")), 9)
   |Sexpr(Pair(sexpr1, sexpr2)) -> ( (const, (offset, " MAKE_LITERAL_PAIR(const_tbl+ "^ (string_of_int (get_const_address table (Sexpr(sexpr1)))) ^"
   , const_tbl+" ^ (string_of_int (get_const_address table (Sexpr(sexpr2)))) ^")")), 17)
@@ -100,11 +100,10 @@ module Code_Gen = struct
   |Sexpr(Bool true) -> ( (const, (offset, "MAKE_BOOL(1)")), 2)
   |Sexpr(Number(Int(num))) -> ( (const, (offset, "MAKE_LITERAL_INT(" ^ (string_of_int num) ^")")), 9)
   |Sexpr(Number(Float(num))) -> ( (const, (offset, "MAKE_LITERAL_FLOAT(" ^ (string_of_float num) ^")")), 9)
-  |Sexpr(Char(c)) -> ( (const, (offset, "MAKE_LITERAL_CHAR("^ (Char.escaped c) ^")")), 2)
-  |Sexpr(String(str)) -> ( (const, (offset, " MAKE_LITERAL_STRING(\" "^ str ^" \")")), (String.length str) + 9) (*to check!*)
-  |Sexpr(Symbol(str)) -> ( (const, (offset, " MAKE_LITERAL_SYMBOL(const_tbl+ "^ (string_of_int (get_const_address_iter_2 table (Sexpr(String(str))))) ^")")), 9)
-  |Sexpr(Pair(sexpr1, sexpr2)) ->  ( (const, (offset, " MAKE_LITERAL_PAIR(const_tbl+ "^ (string_of_int (get_const_address_iter_2 table (Sexpr(sexpr1)))) ^"
-  , const_tbl+" ^ (string_of_int (get_const_address_iter_2 table (Sexpr(sexpr2)))) ^")")), 17)
+  |Sexpr(Char(c)) -> ( (const, (offset, "MAKE_LITERAL_CHAR('"^ (Char.escaped c) ^"')")), 2)
+  |Sexpr(String(str)) -> ( (const, (offset, "MAKE_LITERAL_STRING(\""^ str ^"\")")), (String.length str) + 9) (*to check!*)
+  |Sexpr(Symbol(str)) -> ( (const, (offset, "MAKE_LITERAL_SYMBOL(const_tbl+ "^ (string_of_int (get_const_address_iter_2 table (Sexpr(String(str))))) ^")")), 9)
+  |Sexpr(Pair(sexpr1, sexpr2)) ->  ( (const, (offset, " MAKE_LITERAL_PAIR(const_tbl+ "^ (string_of_int (get_const_address_iter_2 table (Sexpr(sexpr1)))) ^", const_tbl+" ^ (string_of_int (get_const_address_iter_2 table (Sexpr(sexpr2)))) ^")")), 17)
   |Sexpr(TagRef(name)) -> ((const, (offset, "")) , 0)
   |_ -> raise X_this_should_not_happen;;
   
@@ -305,10 +304,10 @@ let call_function_and_return =
   let rec generate consts fvars e = match e with
   | Const'(constant)->  "mov rax, " ^ (get_address_in_const_table constant consts)
   | Var'(VarParam(_,minor)) -> "mov rax, qword [rbp + 8 * (4 + " ^ string_of_int minor ^ ")]"
-  | Var'(VarBound(_,major,minor)) -> "mov rax, qword [rbp + 8 ∗ 2] \n mov rax, qword [rax + 8 ∗ " ^ string_of_int major ^"] \n mov rax, qword [rax + 8 ∗" ^ string_of_int minor ^ "]"  
+  | Var'(VarBound(_,major,minor)) -> "mov rax, qword [rbp + 8∗2]\nmov rax, qword [rax + 8 ∗ " ^ (string_of_int major) ^"]\nmov rax, qword [rax + 8 ∗ " ^ (string_of_int minor) ^ "]"  
   | Var'(VarFree(name)) -> "mov rax, qword [fvar_tbl+" ^  (string_of_int (List.assoc name fvars))^"]" 
   | BoxGet'(v)-> (generate consts fvars (Var'(v))) ^ "\n" ^ "mov rax, qword [rax]"
-  | BoxSet'(v, exp)-> (generate consts fvars exp) ^ "\npush rax" ^ (generate consts fvars (Var'(v))) ^ "\npop qword [rax] \nmov rax, SOB_VOID_ADDRESS"
+  | BoxSet'(v, exp)-> (generate consts fvars exp) ^ "\npush rax\n" ^ (generate consts fvars (Var'(v))) ^ "\npop qword [rax] \nmov rax, SOB_VOID_ADDRESS"
   | If'(test, dit, dif) -> let str =  (generate consts fvars test) ^ "\n" ^ "cmp rax, SOB_FALSE_ADDRESS" ^ "\n" ^ "je Lelse" ^ (string_of_int label_index.index)^  "\n"
   ^ (generate consts fvars dit) ^"\n" ^ "jmp Lexit" ^ (string_of_int label_index.index) ^ "\n" ^ "Lelse" ^ (string_of_int label_index.index) ^":\n" ^ (generate consts fvars dif) 
   ^ "\nLexit" ^(string_of_int label_index.index) ^ ":" in let () = label_index.index <- label_index.index + 1 in str 
@@ -320,7 +319,7 @@ let call_function_and_return =
   "mov qword [rbx + 8*" ^ (string_of_int minor) ^ "], rax"^  "\n"^ "mov rax, SOB_VOID_ADDRESS"
   |Set'(Var'(VarFree(v)), exp) -> (generate consts fvars exp) ^ "\n"^ "mov qword [fvar_tbl+" ^ string_of_int (List.assoc v fvars) ^"], rax" ^"\n" ^ "mov rax, SOB_VOID_ADDRESS"
   |Def'(Var'(VarFree(v)), exp)-> (generate consts fvars exp) ^ "\n"^ "mov qword [fvar_tbl+" ^ string_of_int (List.assoc v fvars) ^"], rax" ^"\n" ^ "mov rax, SOB_VOID_ADDRESS"
-  | Or'(expr_list)-> let all_orrs = List.fold_left (fun accList curexp -> accList ^ (generate consts fvars curexp) ^ "cmp rax, SOB_FALSE_ADDRESS \n jne Lexit" ^ (string_of_int label_index.index)) "" expr_list 
+  | Or'(expr_list)-> let all_expr = List.map (generate consts fvars) expr_list in  let all_orrs = List.fold_left (fun accList curr_str -> accList ^ curr_str ^ "\ncmp rax, SOB_FALSE_ADDRESS \njne Lexit" ^ (string_of_int label_index.index) ^"\n") "" all_expr 
   in let fin_str = all_orrs ^ "\nLexit" ^(string_of_int label_index.index) ^ ":" in let () = label_index.index <- label_index.index + 1 in fin_str 
   | LambdaSimple'(params, expr)-> let generated_body = (generate consts fvars expr) in let lambda_code = generate_lambda (string_of_int label_index.index) in let fin_str = lambda_code ^ (genarate_simple_body generated_body (string_of_int label_index.index))
   in let () = label_index.index <- label_index.index + 1 in fin_str
