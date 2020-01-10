@@ -1,3 +1,97 @@
+car:
+    push rbp
+    mov rbp, rsp 
+
+    mov rsi, PVAR(0)
+    cmp byte [rsi], T_PAIR 
+    jne .return  ;;what to do if it is not a pair 
+    mov rax, [rsi + TYPE_SIZE]
+.return:
+    leave
+    ret 
+
+cdr:
+    push rbp
+    mov rbp, rsp 
+
+    mov rsi, PVAR(0)
+    cmp byte [rsi], T_PAIR 
+    jne .return  ;;what to do if it is not a pair 
+    mov rax, [rsi + TYPE_SIZE+ WORD_SIZE]
+.return:
+    leave
+    ret
+
+cons:
+    push rbp
+    mov rbp, rsp 
+
+    mov rsi, PVAR(0)
+    mov rdi, PVAR(1)
+    MAKE_PAIR(rax, rsi, rdi) 
+    leave
+    ret 
+    
+set_car:
+    push rbp
+    mov rbp, rsp 
+
+    mov rsi, PVAR(0) ;;pair
+    mov rdi, PVAR(1) ;;obj
+    
+    mov [rsi+TYPE_SIZE], rdi 
+    leave
+    ret 
+
+set_cdr:
+    push rbp
+    mov rbp, rsp 
+
+    mov rsi, PVAR(0) ;;pair
+    mov rdi, PVAR(1) ;;obj
+    
+    mov [rsi+TYPE_SIZE+WORD_SIZE], rdi 
+    leave
+    ret 
+
+apply:
+    push rbp 
+    mov rbp, rsp 
+
+    mov rsi, PVAR(0) ;;function 
+    mov rdi, PVAR(1) ;;pair of args  
+    mov rcx, 0 
+.push_args_from_0_to_n:
+    cmp rdi, SOB_NIL_ADDRESS
+    je .push_args_from_n_to_0
+    push qword [rdi + TYPE_SIZE] ;;car of pair
+    mov rdi, [rdi + TYPE_SIZE + WORD_SIZE] ;;cdr of pair which is also a pair  
+    inc rcx 
+    jmp .push_args_from_0_to_n
+
+.push_args_from_n_to_0: ;;turn the stack 
+    mov rbx, 0 
+.args_on_stack_n_to_0:
+    cmp rbx, rcx ;;rcx = number of args 
+    je .call_function
+    mov rdx, rsp ;;rdx points to args n that we pushed before and on top of him all the args from 0 to n-1 
+    push qword [rdx + rbx*8]    
+    inc rbx
+    jmp .args_on_stack_n_to_0
+
+.call_function:
+    push rcx ;;number of args 
+    push qword [rbp + 8*2] ;;env 
+    call rsi ;;call function 
+    ;;ret from function 
+    add rsp, 8 ;;pop env
+    pop rbx ;;pop num of args 
+    shl rbx, 4 ;;mul rbx*2*8  empty args 0 to n and args n to 0 
+    add rsp, rbx 
+    leave
+    ret 
+    
+
 is_boolean:
     push rbp
     mov rbp, rsp

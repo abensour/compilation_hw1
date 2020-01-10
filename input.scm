@@ -22,5 +22,7 @@
 ;;(begin 1 2 3) 
 ;;((lambda (x) 1 2 x) 3) 
 
-'helloooo
+;;'helloooo
+
+(car '(1 2 3))
 

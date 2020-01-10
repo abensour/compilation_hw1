@@ -14,8 +14,12 @@ MAKE_VOID
 MAKE_NIL
 MAKE_BOOL(0)
 MAKE_BOOL(1)
-MAKE_LITERAL_STRING("helloooo")
-MAKE_LITERAL_SYMBOL(const_tbl+ 6)
+MAKE_LITERAL_INT(1)
+MAKE_LITERAL_INT(2)
+MAKE_LITERAL_INT(3)
+ MAKE_LITERAL_PAIR(const_tbl+ 24, const_tbl+1)
+ MAKE_LITERAL_PAIR(const_tbl+ 15, const_tbl+33)
+ MAKE_LITERAL_PAIR(const_tbl+ 6, const_tbl+50)
 
 ;;; These macro definitions are required for the primitive
 ;;; definitions in the epilogue to work properly
@@ -25,6 +29,12 @@ MAKE_LITERAL_SYMBOL(const_tbl+ 6)
 %define SOB_TRUE_ADDRESS const_tbl+4
 
 fvar_tbl:
+dq T_UNDEFINED
+dq T_UNDEFINED
+dq T_UNDEFINED
+dq T_UNDEFINED
+dq T_UNDEFINED
+dq T_UNDEFINED
 dq T_UNDEFINED
 dq T_UNDEFINED
 dq T_UNDEFINED
@@ -121,13 +131,42 @@ main:
     mov [fvar_tbl+21], rax
     MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, bin_equ)
     mov [fvar_tbl+22], rax
+    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, car)
+    mov [fvar_tbl+28], rax
+    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, cdr)
+    mov [fvar_tbl+23], rax
+    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, cons)
+    mov [fvar_tbl+24], rax
+    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, set_car)
+    mov [fvar_tbl+25], rax
+    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, set_cdr)
+    mov [fvar_tbl+26], rax
+    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, apply)
+    mov [fvar_tbl+27], rax
 
 user_code_fragment:
 ;;; The code you compiled will be catenated here.
 ;;; It will be executed immediately after the closures for 
 ;;; the primitive procedures are set up.
 
-mov rax, const_tbl+23
+push qword 12345678
+mov rax, const_tbl+67
+push rax
+push 1
+mov rax, qword [fvar_tbl+28]
+cmp byte [rax], T_CLOSURE 
+
+   jne L_total_exit
+   CLOSURE_ENV rbx, rax
+   push rbx 
+   CLOSURE_CODE rbx, rax
+   call rbx
+   ;;after returning 
+   add rsp, 8 ;;pop env
+   pop rbx ;;rbx = number of args
+   shl rbx, 3 ;; rbx = rbx*8
+   add rsp, rbx ;;pop args
+   add rsp, 8 ;;pop magic
 	call write_sob_if_not_void
 L_total_exit: ;;add index!!!!!!!!!!!!!!
 
@@ -135,6 +174,100 @@ L_total_exit: ;;add index!!!!!!!!!!!!!!
 	add rsp, 4*8
 	pop rbp
 	ret
+
+car:
+    push rbp
+    mov rbp, rsp 
+
+    mov rsi, PVAR(0)
+    cmp byte [rsi], T_PAIR 
+    jne .return  ;;what to do if it is not a pair 
+    mov rax, [rsi + TYPE_SIZE]
+.return:
+    leave
+    ret 
+
+cdr:
+    push rbp
+    mov rbp, rsp 
+
+    mov rsi, PVAR(0)
+    cmp byte [rsi], T_PAIR 
+    jne .return  ;;what to do if it is not a pair 
+    mov rax, [rsi + TYPE_SIZE+ WORD_SIZE]
+.return:
+    leave
+    ret
+
+cons:
+    push rbp
+    mov rbp, rsp 
+
+    mov rsi, PVAR(0)
+    mov rdi, PVAR(1)
+    MAKE_PAIR(rax, rsi, rdi) 
+    leave
+    ret 
+    
+set_car:
+    push rbp
+    mov rbp, rsp 
+
+    mov rsi, PVAR(0) ;;pair
+    mov rdi, PVAR(1) ;;obj
+    
+    mov [rsi+TYPE_SIZE], rdi 
+    leave
+    ret 
+
+set_cdr:
+    push rbp
+    mov rbp, rsp 
+
+    mov rsi, PVAR(0) ;;pair
+    mov rdi, PVAR(1) ;;obj
+    
+    mov [rsi+TYPE_SIZE+WORD_SIZE], rdi 
+    leave
+    ret 
+
+apply:
+    push rbp 
+    mov rbp, rsp 
+
+    mov rsi, PVAR(0) ;;function 
+    mov rdi, PVAR(1) ;;pair of args  
+    mov rcx, 0 
+.push_args_from_0_to_n:
+    cmp rdi, SOB_NIL_ADDRESS
+    je .push_args_from_n_to_0
+    push qword [rdi + TYPE_SIZE] ;;car of pair
+    mov rdi, [rdi + TYPE_SIZE + WORD_SIZE] ;;cdr of pair which is also a pair  
+    inc rcx 
+    jmp .push_args_from_0_to_n
+
+.push_args_from_n_to_0: ;;turn the stack 
+    mov rbx, 0 
+.args_on_stack_n_to_0:
+    cmp rbx, rcx ;;rcx = number of args 
+    je .call_function
+    mov rdx, rsp ;;rdx points to args n that we pushed before and on top of him all the args from 0 to n-1 
+    push qword [rdx + rbx*8]    
+    inc rbx
+    jmp .args_on_stack_n_to_0
+
+.call_function:
+    push rcx ;;number of args 
+    push qword [rbp + 8*2] ;;env 
+    call rsi ;;call function 
+    ;;ret from function 
+    add rsp, 8 ;;pop env
+    pop rbx ;;pop num of args 
+    shl rbx, 4 ;;mul rbx*2*8  empty args 0 to n and args n to 0 
+    add rsp, rbx 
+    leave
+    ret 
+    
 
 is_boolean:
     push rbp
