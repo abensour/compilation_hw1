@@ -73,11 +73,23 @@ apply:
     mov rbx, 0 
 .args_on_stack_n_to_0:
     cmp rbx, rcx ;;rcx = number of args 
-    je .call_function
+    ja .override_old_push_args
     mov rdx, rsp ;;rdx points to args n that we pushed before and on top of him all the args from 0 to n-1 
     push qword [rdx + rbx*8]    
     inc rbx
     jmp .args_on_stack_n_to_0
+
+.override_old_push_args:
+    mov rbx, 0 
+    mov rax, rsp ;;points to stack right now
+    add rax, rcx ;;point to previous stack that was arrange with args0 to argn 
+.override:
+    cmp rbx, rcx ;;rbx = number of args 
+    ja .call_function
+    pop rdx ;;arg 0 
+    mov [rax + rbx*8], rdx 
+    inc rbx 
+    jmp .override 
 
 .call_function:
     push rcx ;;number of args 
@@ -86,7 +98,7 @@ apply:
     ;;ret from function 
     add rsp, 8 ;;pop env
     pop rbx ;;pop num of args 
-    shl rbx, 4 ;;mul rbx*2*8  empty args 0 to n and args n to 0 
+    shl rbx, 3 ;;mul rbx*8 
     add rsp, rbx 
     leave
     ret 
