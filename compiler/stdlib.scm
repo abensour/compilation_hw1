@@ -28,10 +28,17 @@
 			(fun (fold-loop fun init (cdr list)) (car list))))))
   			fold-loop)))
 
-(define cons*
-	(let ((cons cons) (fold-right fold-right)) 
-	(lambda args 
-		(fold-right (lambda (acc cur) (cons cur acc)) () args))))
+(define cons* (lambda args
+	(let ((cons cons) (car car) (cdr cdr)) 
+	(letrec ((cons-loop (lambda (lst) 
+		  (if (null? lst)
+      '()
+      (if (null? (cdr lst))
+        (car lst)
+        (if (null? (cdr (cdr lst)))
+          (cons (car lst) (car (cdr lst)))
+          (cons (car lst) (cons-loop (cdr lst)))))))))
+      (cons-loop args)))))
 
 (define append
   (let ((null? null?)
@@ -43,6 +50,11 @@
 			e
 			(fold-right cons a e)))
 		  '() args))))
+
+(define cons*
+	(let ((cons cons) (fold-right fold-right)) 
+	(lambda args 
+		(fold-right (lambda (acc cur) (cons cur acc)) () args))))
 
 (define list (lambda x x))
 
