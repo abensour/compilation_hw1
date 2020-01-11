@@ -86,7 +86,7 @@ module Code_Gen = struct
   |Sexpr(Number(Int(num))) -> ( (const, (offset, "MAKE_LITERAL_INT(" ^ (string_of_int num) ^")")), 9)
   |Sexpr(Number(Float(num))) -> ( (const, (offset, "MAKE_LITERAL_FLOAT(" ^ (string_of_float num) ^")")), 9)
   |Sexpr(Char(c)) -> ( (const, (offset, "MAKE_LITERAL_CHAR("^ (Char.escaped c) ^")")), 2)
-  |Sexpr(String(str)) -> ( (const, (offset, "MAKE_LITERAL_STRING(\""^ str ^"\")")), (String.length str) + 9) (*to check!*)
+  |Sexpr(String(str)) -> ( (const, (offset, "MAKE_LITERAL_STRING \""^ str ^"\"")), (String.length str) + 9) (*to check!*)
   |Sexpr(Symbol(str)) -> ( (const, (offset, " MAKE_LITERAL_SYMBOL(const_tbl+ "^ (string_of_int (get_const_address table (Sexpr(String(str))))) ^")")), 9)
   |Sexpr(Pair(sexpr1, sexpr2)) -> ( (const, (offset, " MAKE_LITERAL_PAIR(const_tbl+ "^ (string_of_int (get_const_address table (Sexpr(sexpr1)))) ^"
   , const_tbl+" ^ (string_of_int (get_const_address table (Sexpr(sexpr2)))) ^")")), 17)
@@ -101,7 +101,7 @@ module Code_Gen = struct
   |Sexpr(Number(Int(num))) -> ( (const, (offset, "MAKE_LITERAL_INT(" ^ (string_of_int num) ^")")), 9)
   |Sexpr(Number(Float(num))) -> ( (const, (offset, "MAKE_LITERAL_FLOAT(" ^ (string_of_float num) ^")")), 9)
   |Sexpr(Char(c)) -> ( (const, (offset, "MAKE_LITERAL_CHAR('"^ (Char.escaped c) ^"')")), 2)
-  |Sexpr(String(str)) -> ( (const, (offset, "MAKE_LITERAL_STRING(\""^ str ^"\")")), (String.length str) + 9) (*to check!*)
+  |Sexpr(String(str)) -> ( (const, (offset, "MAKE_LITERAL_STRING \""^ str ^"\"")), (String.length str) + 9) (*to check!*)
   |Sexpr(Symbol(str)) -> ( (const, (offset, "MAKE_LITERAL_SYMBOL(const_tbl+ "^ (string_of_int (get_const_address_iter_2 table (Sexpr(String(str))))) ^")")), 9)
   |Sexpr(Pair(sexpr1, sexpr2)) ->  ( (const, (offset, " MAKE_LITERAL_PAIR(const_tbl+ "^ (string_of_int (get_const_address_iter_2 table (Sexpr(sexpr1)))) ^", const_tbl+" ^ (string_of_int (get_const_address_iter_2 table (Sexpr(sexpr2)))) ^")")), 17)
   |Sexpr(TagRef(name)) -> ((const, (offset, "")) , 0)

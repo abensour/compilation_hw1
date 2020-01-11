@@ -17,9 +17,6 @@ MAKE_BOOL(1)
 MAKE_LITERAL_INT(1)
 MAKE_LITERAL_INT(2)
 MAKE_LITERAL_INT(3)
- MAKE_LITERAL_PAIR(const_tbl+ 24, const_tbl+1)
- MAKE_LITERAL_PAIR(const_tbl+ 15, const_tbl+33)
- MAKE_LITERAL_PAIR(const_tbl+ 6, const_tbl+50)
 
 ;;; These macro definitions are required for the primitive
 ;;; definitions in the epilogue to work properly
@@ -132,28 +129,97 @@ main:
     MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, bin_equ)
     mov [fvar_tbl+22], rax
     MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, car)
-    mov [fvar_tbl+28], rax
-    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, cdr)
     mov [fvar_tbl+23], rax
-    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, cons)
+    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, cdr)
     mov [fvar_tbl+24], rax
-    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, set_car)
+    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, cons)
     mov [fvar_tbl+25], rax
-    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, set_cdr)
+    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, set_car)
     mov [fvar_tbl+26], rax
-    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, apply)
+    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, set_cdr)
     mov [fvar_tbl+27], rax
+    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, apply)
+    mov [fvar_tbl+28], rax
 
 user_code_fragment:
 ;;; The code you compiled will be catenated here.
 ;;; It will be executed immediately after the closures for 
 ;;; the primitive procedures are set up.
 
+
+mov rax, const_tbl+6
+mov rax, const_tbl+15
+mov rax, const_tbl+24
+	call write_sob_if_not_void
+
 push qword 12345678
-mov rax, const_tbl+67
+mov rax, const_tbl+24
 push rax
 push 1
-mov rax, qword [fvar_tbl+28]
+mov rbx, [rbp + 8*2] ;;rbx = address of env
+  mov rcx, 0 ;;counter for size of env
+count_env_length0:
+    cmp qword rbx, SOB_NIL_ADDRESS
+    je end_count_env_length0
+    add rbx, 8
+    add rcx, 1 
+    jmp count_env_length0
+end_count_env_length0: 
+    push rcx
+    add rcx,1 ;;size of extent env 
+    shl rcx, 3 ;;mul rcx*8
+    MALLOC rax, rcx 
+    pop rcx ;;env size 
+    mov rbx, [rbp + 8*2] 
+;;rbx is oldenv adrees and rax is extenvadrees
+    mov rsi, 0 ;;i
+    mov rdi, 1 ;;j
+copy_old_env0:
+    cmp rsi, rcx
+    je end_copy_old_env0 
+    mov rdx, [rbx + 8*rsi] ;;Env[i]
+    mov [rax + 8*rdi], rdx ;;ExtEnv[j] = Env[i]
+    inc rsi
+    inc rdi 
+    jmp copy_old_env0
+
+end_copy_old_env0:
+    mov rdx, [rbp + 8*3]
+    push rax
+    push rdx 
+    shl rdx, 3 ;;mul rdx*8
+    MALLOC rbx, rdx ;;rbx is address of ExtEnv[0]
+    pop rdx ;;number of params 
+    pop rax ;;address of ExtEnv
+    mov [rax], rbx  ;;put ExtEnv[0] address in ExtEnv Vector 
+;;rbx is the pointer to the extenv[0] and rdx number of params 
+    mov rcx,0
+compy_params0:
+    cmp rcx, rdx 
+    je end_copy_params0 
+    mov rsi, rcx 
+    shl rsi, 3 ;;for param number rcx  = mul rsi*8
+    add rsi, 4*8 ;;for the zeroth param
+    add rsi, rbp 
+    ;;[rbp + 4*8 + rcx*8]
+    mov rsi, [rsi]
+    mov [rbx+rcx*8], rsi 
+    inc rcx 
+    jmp compy_params0
+end_copy_params0:
+    mov rbx, rax 
+    MAKE_CLOSURE(rax, rbx ,Lcode0) 
+    jmp Lcont0
+Lcode0:
+    push rbp
+    mov rbp, rsp 
+
+mov rax, const_tbl+6
+mov rax, const_tbl+15
+mov rax, qword [rbp + 8 * (4 + 0)]
+leave
+    ret 
+Lcont0:
 cmp byte [rax], T_CLOSURE 
 
    jne L_total_exit
