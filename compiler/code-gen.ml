@@ -292,6 +292,62 @@ let genarate_simple_body generated_body str_index =
     ret 
 Lcont" ^ str_index ^":";;
 
+let generated_opt_body generated_body str_indx num_of_args=
+"\nLcode" ^ str_index ^":
+    mov rcx, [esp + 3*8] ;; number of argumants
+    mov rdx, " ^ num_of_args ^" 
+    mov rsi, 3
+    add rsi, rcx ;;last argumant
+    shl rsi, 3 ;;mul by 8
+    add rsi ,esp
+    sub rcx, rdx ;;number of iteration
+    cmp rcx, 0 ;;empty opt
+    je put_nil
+    mov rbx, qword [rsi]
+    MAKE_PAIR rax ,rbx ,SOB_NIL_ADDRESS
+    mov rdi, 1
+    sub rsi, 8 ;;to go down by one argumant 
+  generate_opt_list" ^ str_index ^ ":
+    cmp rdi, rcx
+    je end_generate_opt_list" ^ str_index ^ " 
+    mov rbx, qword [rsi] ;;current argumant
+    mov rdx, rax ;;ponter to previus pair
+    MAKE_PAIR rax ,rbx ,rdx
+    inc rdi
+    sub rsi, 8 ;;to go down by one argumant 
+    jmp generate_opt_list" ^ str_index ^ "
+  end_generate_opt_list" ^ str_index ^ ":
+    mov rdx, " ^ num_of_args ^" 
+    mov rcx, 4 ;;until first args +1 
+    add rcx, rdx ;;plus number of argumants
+    shl rcx, 3 ;;multiply by 8
+    add rcx, rsp ;;make it the pointer to the first optional arg
+    mov qword [rcx], rax ;; list of optionals
+    inc rdx ;;new number of args
+    mov rcx, qword [rsp + 3*8] ;; previous number of args
+    mov qword [rsp + 3*8], rdx ;; change number of argumant to be real number of argoumants
+    ;;dest = (prev number of args - cur args) * 8 + rsp 
+    mov rdi, rcx ;;prev number of args 
+    sub rdi, rdx ;;curr
+    shl rdi, 3 
+    add rdi, rsp ;;dest
+    ;;src = rsp
+    mov rsi, rsp
+    ;;size 
+    add rdx, 3
+    shl rdx, 3
+    call memmove 
+    jmp body_start" ^ str_index ^"
+  put_nil:
+    add rsi, 8 ;; get to magic
+    mov qword [rsi], SOB_NIL_ADDRESS
+  body_start" ^ str_index ^":
+    push rbp
+    mov rbp, rsp \n"^ generated_body ^
+ "\nleave
+    ret 
+Lcont" ^ str_index ^":";;
+
 let magic = "push qword 12345678\n";;
 let call_function_and_return =   
    "cmp byte [rax], T_CLOSURE \n
@@ -329,8 +385,8 @@ let call_function_and_return =
   in let fin_str = all_orrs ^ "\nLexit" ^(string_of_int label_index.index) ^ ":" in let () = label_index.index <- label_index.index + 1 in fin_str 
   | LambdaSimple'(params, expr)-> let generated_body = (generate consts fvars expr) in let lambda_code = generate_lambda (string_of_int label_index.index) in let fin_str = lambda_code ^ (genarate_simple_body generated_body (string_of_int label_index.index))
   in let () = label_index.index <- label_index.index + 1 in fin_str
-  (*| LambdaOpt'(params, optional, expr)->
-  *)| Applic'(closure, args)-> let push_args_string = List.fold_right (fun curr acc -> acc ^ (generate consts fvars curr)^ "\n"^"push rax\n") args "" in
+  | LambdaOpt'(params, optional, expr)-> let generated_body = (generate consts fvars expr) in let lambda_code = generate_lambda (string_of_int label_index.index) in lambda_code ^ (genarate_opt_body generated_body (string_of_int label_index.index))
+  | Applic'(closure, args)-> let push_args_string = List.fold_right (fun curr acc -> acc ^ (generate consts fvars curr)^ "\n"^"push rax\n") args "" in
                                let n = "push " ^(string_of_int (List.length args))^"\n" in 
                                magic ^ push_args_string ^ n ^ (generate consts fvars closure) ^"\n"^ call_function_and_return
 
