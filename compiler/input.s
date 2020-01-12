@@ -14,10 +14,10 @@ MAKE_VOID
 MAKE_NIL
 MAKE_BOOL(0)
 MAKE_BOOL(1)
-MAKE_LITERAL_INT(5)
-MAKE_LITERAL_INT(6)
- MAKE_LITERAL_PAIR(const_tbl+ 15, const_tbl+1)
- MAKE_LITERAL_PAIR(const_tbl+ 6, const_tbl+24)
+MAKE_LITERAL_INT(1)
+MAKE_LITERAL_INT(2)
+MAKE_LITERAL_INT(3)
+MAKE_LITERAL_INT(4)
 
 ;;; These macro definitions are required for the primitive
 ;;; definitions in the epilogue to work properly
@@ -177,12 +177,125 @@ user_code_fragment:
 ;;; the primitive procedures are set up.
 
 push qword 12345678
-mov rax, const_tbl+41
+mov rax, const_tbl+33
 push rax
-mov rax, qword [fvar_tbl+200]
+mov rax, const_tbl+24
 push rax
-push 2
-mov rax, qword [fvar_tbl+224]
+mov rax, const_tbl+15
+push rax
+mov rax, const_tbl+6
+push rax
+push 4
+mov rbx, [rbp + 8*2] ;;rbx = address of env
+  mov rcx, 0 ;;counter for size of env
+count_env_length0:
+    cmp qword rbx, SOB_NIL_ADDRESS
+    je end_count_env_length0
+    add rbx, 8
+    add rcx, 1 
+    jmp count_env_length0
+end_count_env_length0: 
+    push rcx
+    add rcx,1 ;;size of extent env 
+    shl rcx, 3 ;;mul rcx*8
+    MALLOC rax, rcx 
+    pop rcx ;;env size 
+    mov rbx, [rbp + 8*2] 
+;;rbx is oldenv adrees and rax is extenvadrees
+    mov rsi, 0 ;;i
+    mov rdi, 1 ;;j
+copy_old_env0:
+    cmp rsi, rcx
+    je end_copy_old_env0 
+    mov rdx, [rbx + 8*rsi] ;;Env[i]
+    mov [rax + 8*rdi], rdx ;;ExtEnv[j] = Env[i]
+    inc rsi
+    inc rdi 
+    jmp copy_old_env0
+
+end_copy_old_env0:
+    mov rdx, [rbp + 8*3]
+    push rax
+    push rdx 
+    shl rdx, 3 ;;mul rdx*8
+    MALLOC rbx, rdx ;;rbx is address of ExtEnv[0]
+    pop rdx ;;number of params 
+    pop rax ;;address of ExtEnv
+    mov [rax], rbx  ;;put ExtEnv[0] address in ExtEnv Vector 
+;;rbx is the pointer to the extenv[0] and rdx number of params 
+    mov rcx,0
+compy_params0:
+    cmp rcx, rdx 
+    je end_copy_params0 
+    mov rsi, rcx 
+    shl rsi, 3 ;;for param number rcx  = mul rsi*8
+    add rsi, 4*8 ;;for the zeroth param
+    add rsi, rbp 
+    ;;[rbp + 4*8 + rcx*8]
+    mov rsi, [rsi]
+    mov [rbx+rcx*8], rsi 
+    inc rcx 
+    jmp compy_params0
+end_copy_params0:
+    mov rbx, rax 
+    MAKE_CLOSURE(rax, rbx ,Lcode0) 
+    jmp Lcont0
+Lcode0:
+    mov rcx, [rsp + 2*8] ;; number of argumants
+    mov rdx, 1 
+    mov rsi, 2 
+    add rsi, rcx ;;last argumant
+    shl rsi, 3 ;;mul by 8
+    add rsi ,rsp ;;rsi is the top the stack befor magic 
+    sub rcx, rdx ;;number of iteration
+    cmp rcx, 0 ;;empty opt
+    je put_nil
+    mov rbx, qword [rsi]
+    MAKE_PAIR(rax ,rbx ,SOB_NIL_ADDRESS)
+    mov rdi, 1
+    sub rsi, 8 ;;to go down by one argumant 
+  generate_opt_list0:
+    cmp rdi, rcx
+    je end_generate_opt_list0 
+    mov rbx, qword [rsi] ;;current argumant
+    mov rdx, rax ;;ponter to previus pair
+    MAKE_PAIR(rax ,rbx ,rdx)
+    inc rdi
+    sub rsi, 8 ;;to go down by one argumant 
+    jmp generate_opt_list0
+  end_generate_opt_list0:
+    mov rdx, 1 
+    mov rcx, 3 ;;until first args +1 for the new argument that we added
+    add rcx, rdx ;;plus number of argumants
+    shl rcx, 3 ;;multiply by 8
+    add rcx, rsp ;;make it the pointer to the first optional arg
+    mov qword [rcx], rax ;; list of optionals
+    inc rdx ;;new number of args
+    mov rcx, qword [rsp + 2*8] ;; previous number of args
+    mov qword [rsp + 2*8], rdx ;; change number of argumant to be real number of argoumants
+    ;;dest = (prev number of args - cur args) * 8 + rsp 
+    mov rdi, rcx ;;prev number of args 
+    sub rdi, rdx ;;curr
+    shl rdi, 3 
+    add rdi, rsp ;;dest
+    ;;src = rsp
+    mov rsi, rsp
+    ;;size 
+    add rdx, 3
+    shl rdx, 3
+    call memmove 
+    mov rsp, rax 
+    jmp body_start0
+  put_nil:
+    add rsi, 8 ;; get to magic
+    mov qword [rsi], SOB_NIL_ADDRESS
+  body_start0:
+    push rbp
+    mov rbp, rsp 
+mov rax, qword [rbp + 8 * (4 + 1)]
+leave
+    ret 
+Lcont0:
 cmp byte [rax], T_CLOSURE 
 
    jne L_total_exit

@@ -32,11 +32,13 @@
 ;;(set-cdr! x '(1 2))
 ;;x
 ;;(apply + '(1 2))
-(apply cons '(5 6))
+;;(apply cons '(5 6))
 ;;(< 1 1)
 ;;'(#{x}=#{y}=2 #{x} #{y}) 
 ;;(define y '(#{a}=#t #{a}))
 ;;y
 ;;'#{x}=(1 . #{x})
+((lambda (a . c) c) 1 2 3 4)
+;;((lambda (x) x) 1)
 
 
