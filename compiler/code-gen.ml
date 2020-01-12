@@ -170,26 +170,32 @@ match exp' with
 let rename_ast asts =
   let (asts_renamed,_) =  List.fold_left (fun (accList,indx) exp' -> (accList @ [(rename_reffs exp' indx)] , indx +1 )) ([],0) asts in 
   asts_renamed;;
+let ast_without_tagggedSexpr asts = List.fold_left (fun accList curr -> accList @ [build_dictionary_and_remove_tagges curr]) [] asts;;  
+
 
   let make_consts_tbl asts = 
-  let ast_without_tagggedSexpr =List.fold_left (fun accList curr -> accList @ [build_dictionary_and_remove_tagges curr]) [] asts in 
   let must_const = [Void ;Sexpr(Nil); Sexpr(Bool false) ; Sexpr(Bool true)] in
-  let list_of_consts = List.flatten (List.map make_list_of_all_consts ast_without_tagggedSexpr) in
+  let list_of_consts = List.flatten (List.map make_list_of_all_consts asts) in
   let extended_list = must_const @ List.flatten (List.map extend_consts_table list_of_consts) in
   let reduced = reduce_list extended_list in
   let table_1 = build_consts_table reduced in build_consts_table_iter_2 table_1;; 
+
+  let check s= 
+  let str = List.map Semantics.run_semantics
+                         (Tag_Parser.tag_parse_expressions
+                            (Reader.read_sexprs s)) in
+                            make_consts_tbl str;;
 
 let exists_str curr_const consts_list = 
   List.fold_left (fun acc curr -> if (curr = curr_const) then true else acc) false consts_list;;
   
 let reduce_list_str l = 
-  List.fold_right (fun curr acc -> if(exists_str curr acc) then acc else [curr]@acc) l [];;
-
+  List.fold_left (fun  acc curr -> if(exists_str curr acc) then acc else acc@[curr]) [] l;;
 
 let primitive_names = 
   ["boolean?"; "float?"; "integer?"; "pair?"; "null?"; "char?"; "string?"; "procedure?"; "symbol?"; "string-length";
    "string-ref"; "string-set!"; "make-string"; "symbol->string"; "char->integer"; "integer->char"; "eq?";
-   "+"; "*"; "-"; "/"; "<"; "=";"car";  "cdr"; "cons"; "set-car!"; "set-cdr!";  "apply" (* you can add yours here *)];;
+   "+"; "*"; "-"; "/"; "<"; "=";(*"car";  "cdr"; "cons"; "set-car!"; "set-cdr!";  "apply"*) (* you can add yours here *)];;
 
 
 let rec fvars_list_from_exp exp'  = 
@@ -210,7 +216,7 @@ match exp' with
 (*[("boolean?" , 0);("is_boolean", 1)]*)
 let gen_fvars_table asts = let fvars_list = List.fold_left (fun acclist exp' -> acclist@ (fvars_list_from_exp exp')) [] asts in
 let fvars_set = reduce_list_str (primitive_names@fvars_list) in 
-let (fvars_table,_) = List.fold_left (fun (acclist,indx) str -> ((acclist @ [(str,indx)]),( indx + 1))) ([],0) fvars_set in fvars_table;;
+let (fvars_table,_) = List.fold_left (fun (acclist,indx) str -> ((acclist @ [(str,indx)]),( indx + 8))) ([],0) fvars_set in fvars_table;;
 
 let make_fvars_tbl asts = gen_fvars_table asts;;
 
