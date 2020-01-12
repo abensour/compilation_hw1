@@ -40,6 +40,7 @@ set_car:
     mov rdi, PVAR(1) ;;obj
     
     mov [rsi+TYPE_SIZE], rdi 
+    mov rax, SOB_VOID_ADDRESS
     leave
     ret 
 
@@ -51,6 +52,7 @@ set_cdr:
     mov rdi, PVAR(1) ;;obj
     
     mov [rsi+TYPE_SIZE+WORD_SIZE], rdi 
+    mov rax, SOB_VOID_ADDRESS
     leave
     ret 
 
@@ -58,7 +60,7 @@ apply:
     push rbp 
     mov rbp, rsp 
 
-    mov rsi, PVAR(0) ;;function 
+    mov rsi, PVAR(0) ;;closure scheme object 
     mov rdi, PVAR(1) ;;pair of args  
     mov rcx, 0 
 .push_args_from_0_to_n:
@@ -71,21 +73,22 @@ apply:
 
 .push_args_from_n_to_0: ;;turn the stack 
     mov rbx, 0 
+    mov rdx, rsp ;;rdx points to args n that we pushed before and on top of him all the args from 0 to n-1 
 .args_on_stack_n_to_0:
     cmp rbx, rcx ;;rcx = number of args 
-    ja .override_old_push_args
-    mov rdx, rsp ;;rdx points to args n that we pushed before and on top of him all the args from 0 to n-1 
+    je .override_old_push_args
     push qword [rdx + rbx*8]    
     inc rbx
     jmp .args_on_stack_n_to_0
 
 .override_old_push_args:
     mov rbx, 0 
-    mov rax, rsp ;;points to stack right now
-    add rax, rcx ;;point to previous stack that was arrange with args0 to argn 
+    mov rax, rcx ;;num of args
+    shl rax, 3 ;;mul rax*8
+    add rax, rsp ;; points to previous stack that was arrange with args0 to argn 
 .override:
     cmp rbx, rcx ;;rbx = number of args 
-    ja .call_function
+    je .call_function
     pop rdx ;;arg 0 
     mov [rax + rbx*8], rdx 
     inc rbx 
@@ -94,7 +97,8 @@ apply:
 .call_function:
     push rcx ;;number of args 
     push qword [rbp + 8*2] ;;env 
-    call rsi ;;call function 
+    mov rsi, qword [rsi+ TYPE_SIZE + WORD_SIZE] ;;rsi <- code of function 
+    call rsi ;;call function - code 
     ;;ret from function 
     add rsp, 8 ;;pop env
     pop rbx ;;pop num of args 
@@ -426,6 +430,7 @@ bin_add:
     mov r8, 0
 
     mov rsi, PVAR(0)
+    mov rbx, qword [rsi+TYPE_SIZE]
     push rsi
     push 1
     push SOB_NIL_ADDRESS

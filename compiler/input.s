@@ -14,10 +14,10 @@ MAKE_VOID
 MAKE_NIL
 MAKE_BOOL(0)
 MAKE_BOOL(1)
- MAKE_LITERAL_PAIR(const_tbl+ 4, const_tbl+1)
- MAKE_LITERAL_PAIR(const_tbl+ 4, const_tbl+6)
-MAKE_LITERAL_INT(1)
- MAKE_LITERAL_PAIR(const_tbl+ 40, const_tbl+49)
+MAKE_LITERAL_INT(5)
+MAKE_LITERAL_INT(6)
+ MAKE_LITERAL_PAIR(const_tbl+ 15, const_tbl+1)
+ MAKE_LITERAL_PAIR(const_tbl+ 6, const_tbl+24)
 
 ;;; These macro definitions are required for the primitive
 ;;; definitions in the epilogue to work properly
@@ -27,6 +27,11 @@ MAKE_LITERAL_INT(1)
 %define SOB_TRUE_ADDRESS const_tbl+4
 
 fvar_tbl:
+dq T_UNDEFINED
+dq T_UNDEFINED
+dq T_UNDEFINED
+dq T_UNDEFINED
+dq T_UNDEFINED
 dq T_UNDEFINED
 dq T_UNDEFINED
 dq T_UNDEFINED
@@ -147,21 +152,50 @@ lab:    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, is_boolean)
     MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, bin_equ)
     mov [fvar_tbl+176], rax
     
+    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, car)
+    mov [fvar_tbl+184], rax
+    
+    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, cdr)
+    mov [fvar_tbl+192], rax
+    
+    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, cons)
+    mov [fvar_tbl+200], rax
+    
+    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, set_car)
+    mov [fvar_tbl+208], rax
+    
+    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, set_cdr)
+    mov [fvar_tbl+216], rax
+    
+    MAKE_CLOSURE(rax, SOB_NIL_ADDRESS, apply)
+    mov [fvar_tbl+224], rax
+    
 
 user_code_fragment:
 ;;; The code you compiled will be catenated here.
 ;;; It will be executed immediately after the closures for 
 ;;; the primitive procedures are set up.
 
-mov rax, const_tbl+23
-mov qword [fvar_tbl+184], rax
-mov rax, SOB_VOID_ADDRESS
-	call write_sob_if_not_void
+push qword 12345678
+mov rax, const_tbl+41
+push rax
+mov rax, qword [fvar_tbl+200]
+push rax
+push 2
+mov rax, qword [fvar_tbl+224]
+cmp byte [rax], T_CLOSURE 
 
-mov rax, qword [fvar_tbl+184]
-	call write_sob_if_not_void
-
-mov rax, const_tbl+49
+   jne L_total_exit
+   CLOSURE_ENV rbx, rax
+   push rbx 
+   CLOSURE_CODE rbx, rax
+   call rbx
+   ;;after returning 
+   add rsp, 8 ;;pop env
+   pop rbx ;;rbx = number of args
+   shl rbx, 3 ;; rbx = rbx*8
+   add rsp, rbx ;;pop args
+   add rsp, 8 ;;pop magic
 	call write_sob_if_not_void
 L_total_exit: ;;add index!!!!!!!!!!!!!!
 
@@ -212,6 +246,7 @@ set_car:
     mov rdi, PVAR(1) ;;obj
     
     mov [rsi+TYPE_SIZE], rdi 
+    mov rax, SOB_VOID_ADDRESS
     leave
     ret 
 
@@ -223,6 +258,7 @@ set_cdr:
     mov rdi, PVAR(1) ;;obj
     
     mov [rsi+TYPE_SIZE+WORD_SIZE], rdi 
+    mov rax, SOB_VOID_ADDRESS
     leave
     ret 
 
@@ -230,7 +266,7 @@ apply:
     push rbp 
     mov rbp, rsp 
 
-    mov rsi, PVAR(0) ;;function 
+    mov rsi, PVAR(0) ;;closure scheme object 
     mov rdi, PVAR(1) ;;pair of args  
     mov rcx, 0 
 .push_args_from_0_to_n:
@@ -243,21 +279,22 @@ apply:
 
 .push_args_from_n_to_0: ;;turn the stack 
     mov rbx, 0 
+    mov rdx, rsp ;;rdx points to args n that we pushed before and on top of him all the args from 0 to n-1 
 .args_on_stack_n_to_0:
     cmp rbx, rcx ;;rcx = number of args 
-    ja .override_old_push_args
-    mov rdx, rsp ;;rdx points to args n that we pushed before and on top of him all the args from 0 to n-1 
+    je .override_old_push_args
     push qword [rdx + rbx*8]    
     inc rbx
     jmp .args_on_stack_n_to_0
 
 .override_old_push_args:
     mov rbx, 0 
-    mov rax, rsp ;;points to stack right now
-    add rax, rcx ;;point to previous stack that was arrange with args0 to argn 
+    mov rax, rcx ;;num of args
+    shl rax, 3 ;;mul rax*8
+    add rax, rsp ;; points to previous stack that was arrange with args0 to argn 
 .override:
     cmp rbx, rcx ;;rbx = number of args 
-    ja .call_function
+    je .call_function
     pop rdx ;;arg 0 
     mov [rax + rbx*8], rdx 
     inc rbx 
@@ -266,7 +303,8 @@ apply:
 .call_function:
     push rcx ;;number of args 
     push qword [rbp + 8*2] ;;env 
-    call rsi ;;call function 
+    mov rsi, qword [rsi+ TYPE_SIZE + WORD_SIZE] ;;rsi <- code of function 
+    call rsi ;;call function - code 
     ;;ret from function 
     add rsp, 8 ;;pop env
     pop rbx ;;pop num of args 
@@ -598,6 +636,7 @@ bin_add:
     mov r8, 0
 
     mov rsi, PVAR(0)
+    mov rbx, qword [rsi+TYPE_SIZE]
     push rsi
     push 1
     push SOB_NIL_ADDRESS

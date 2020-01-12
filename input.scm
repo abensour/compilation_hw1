@@ -23,12 +23,20 @@
 ;;((lambda (x) 1 2 x) 3) 
 
 ;;'helloooo
-
 ;;(car '(1 2 3))
-
+;;(cdr '(1 2 3))
+;;(cons 1 2)
+;;(define x '(1 2 3))
+;;(set-car! x 4)
+;;x
+;;(set-cdr! x '(1 2))
+;;x
+;;(apply + '(1 2))
+(apply cons '(5 6))
 ;;(< 1 1)
 ;;'(#{x}=#{y}=2 #{x} #{y}) 
-(define y '(#{a}=#t #{a}))
-y
-'#{x}=(1 . #{x})
+;;(define y '(#{a}=#t #{a}))
+;;y
+;;'#{x}=(1 . #{x})
+
 

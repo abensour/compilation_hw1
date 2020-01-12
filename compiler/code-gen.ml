@@ -195,7 +195,7 @@ let reduce_list_str l =
 let primitive_names = 
   ["boolean?"; "float?"; "integer?"; "pair?"; "null?"; "char?"; "string?"; "procedure?"; "symbol?"; "string-length";
    "string-ref"; "string-set!"; "make-string"; "symbol->string"; "char->integer"; "integer->char"; "eq?";
-   "+"; "*"; "-"; "/"; "<"; "=";(*"car";  "cdr"; "cons"; "set-car!"; "set-cdr!";  "apply"*) (* you can add yours here *)];;
+   "+"; "*"; "-"; "/"; "<"; "=";"car";  "cdr"; "cons"; "set-car!"; "set-cdr!";  "apply" (* you can add yours here *)];;
 
 
 let rec fvars_list_from_exp exp'  = 
