@@ -106,9 +106,9 @@ try
   let infile = Sys.argv.(1) in
   (*let code =  (file_to_string "stdlib.scm") ^ (file_to_string infile) in*)
   let code = (file_to_string infile) in 
-  let asts = string_to_asts code in
+  let asts = string_to_asts code in 
   let asts = Code_Gen.rename_ast asts in  
-  let asts = Code_Gen.ast_without_tagggedSexpr asts in 
+  let asts = Code_Gen.ast_without_tagggedSexpr asts in
   let consts_tbl = Code_Gen.make_consts_tbl asts in
   let fvars_tbl = Code_Gen.make_fvars_tbl asts in
   let generate = Code_Gen.generate consts_tbl fvars_tbl in

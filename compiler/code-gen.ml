@@ -143,7 +143,7 @@ let rec rename_reffs exp' indx = match exp' with
   | LambdaSimple'(args, expr)->  LambdaSimple'(args,rename_reffs expr indx) 
   | LambdaOpt'(args, optional, expr) -> LambdaOpt'(args, optional, rename_reffs expr indx)
   | Applic'(closure, params)-> Applic'(rename_reffs closure indx, (List.map (fun exp -> rename_reffs exp indx) params)) 
-  | ApplicTP'(closure, params)-> Applic'(rename_reffs closure indx, (List.map (fun exp -> rename_reffs exp indx) params)) 
+  | ApplicTP'(closure, params)-> ApplicTP'(rename_reffs closure indx, (List.map (fun exp -> rename_reffs exp indx) params)) 
   | _ -> exp';;
 
 let rec remove_tagged const  =
@@ -164,7 +164,7 @@ match exp' with
   | LambdaSimple'(args, expr)->  LambdaSimple'(args,build_dictionary_and_remove_tagges expr ) 
   | LambdaOpt'(args, optional, expr) -> LambdaOpt'(args, optional, build_dictionary_and_remove_tagges expr )
   | Applic'(closure, params)-> Applic'(build_dictionary_and_remove_tagges closure , (List.map (fun exp -> build_dictionary_and_remove_tagges exp ) params)) 
-  | ApplicTP'(closure, params)-> Applic'(build_dictionary_and_remove_tagges closure , (List.map (fun exp -> build_dictionary_and_remove_tagges exp ) params)) 
+  | ApplicTP'(closure, params)-> ApplicTP'(build_dictionary_and_remove_tagges closure , (List.map (fun exp -> build_dictionary_and_remove_tagges exp ) params)) 
   | _ -> exp';;
 
 let rename_ast asts =
@@ -184,7 +184,7 @@ let ast_without_tagggedSexpr asts = List.fold_left (fun accList curr -> accList 
   let str = List.map Semantics.run_semantics
                          (Tag_Parser.tag_parse_expressions
                             (Reader.read_sexprs s)) in
-                            make_consts_tbl str;;
+                             str;;
 
 let exists_str curr_const consts_list = 
   List.fold_left (fun acc curr -> if (curr = curr_const) then true else acc) false consts_list;;
@@ -370,7 +370,7 @@ let call_function_and_return =
   | Var'(VarBound(_,major,minor)) -> "mov rax, qword [rbp + 8∗2]\nmov rax, qword [rax + 8 ∗ " ^ (string_of_int major) ^"]\nmov rax, qword [rax + 8 ∗ " ^ (string_of_int minor) ^ "]"  
   | Var'(VarFree(name)) -> "mov rax, qword [fvar_tbl+" ^  (string_of_int (List.assoc name fvars))^"]" 
   | BoxGet'(v)-> (generate consts fvars (Var'(v))) ^ "\n" ^ "mov rax, qword [rax]"
-  | BoxSet'(v, exp)-> (generate consts fvars exp) ^ "\npush rax\n" ^ (generate consts fvars (Var'(v))) ^ "\npop qword [rax] \nmov rax, SOB_VOID_ADDRESS"
+  | BoxSet'(v, exp)-> let () = Printf.printf "here in box" in (generate consts fvars exp) ^ "\npush rax\n" ^ (generate consts fvars (Var'(v))) ^ "\npop qword [rax] \nmov rax, SOB_VOID_ADDRESS"
   | If'(test, dit, dif) -> let str =  (generate consts fvars test) ^ "\n" ^ "cmp rax, SOB_FALSE_ADDRESS" ^ "\n" ^ "je Lelse" ^ (string_of_int label_index.index)^  "\n"
   ^ (generate consts fvars dit) ^"\n" ^ "jmp Lexit" ^ (string_of_int label_index.index) ^ "\n" ^ "Lelse" ^ (string_of_int label_index.index) ^":\n" ^ (generate consts fvars dif) 
   ^ "\nLexit" ^(string_of_int label_index.index) ^ ":" in let () = label_index.index <- label_index.index + 1 in str 
@@ -386,14 +386,47 @@ let call_function_and_return =
   in let fin_str = all_orrs ^ "\nLexit" ^(string_of_int label_index.index) ^ ":" in let () = label_index.index <- label_index.index + 1 in fin_str 
   | LambdaSimple'(params, expr)-> let generated_body = (generate consts fvars expr) in let lambda_code = generate_lambda (string_of_int label_index.index) in let fin_str = lambda_code ^ (genarate_simple_body generated_body (string_of_int label_index.index))
   in let () = label_index.index <- label_index.index + 1 in fin_str
-  | LambdaOpt'(params, optional, expr)-> let generated_body = (generate consts fvars expr) in let lambda_code = generate_lambda (string_of_int label_index.index) in lambda_code ^ (genarate_opt_body generated_body (string_of_int label_index.index) (string_of_int (List.length params)))
-  | Applic'(closure, args)-> let push_args_string = List.fold_right (fun curr acc -> acc ^ (generate consts fvars curr)^ "\n"^"push rax\n") args "" in
+  | LambdaOpt'(params, optional, expr)-> let generated_body = (generate consts fvars expr) in let lambda_code = generate_lambda (string_of_int label_index.index) in let fin_str =  lambda_code ^ (genarate_opt_body generated_body (string_of_int label_index.index) (string_of_int (List.length params)))
+   in let () = label_index.index <- label_index.index + 1 in fin_str
+  | Applic'(closure, args)->  let push_args_string = List.fold_right (fun curr acc -> acc ^ (generate consts fvars curr)^ "\n"^"push rax\n") args "" in
                                let n = "push " ^(string_of_int (List.length args))^"\n" in 
                                magic ^ push_args_string ^ n ^ (generate consts fvars closure) ^"\n"^ call_function_and_return
 
 
-  (*| ApplicTP'(closure, args)->*)
-  |_-> "";;
+  | ApplicTP'(closure, args)-> let push_args_string = List.fold_right (fun curr acc -> acc ^ (generate consts fvars curr)^ "\n"^"push rax\n") args "" in
+                               let n = "push " ^(string_of_int (List.length args))^"\n" in 
+                               magic ^ push_args_string ^ n ^ (generate consts fvars closure) ^"\n"^
+                                "cmp byte [rax], T_CLOSURE \n
+                                 jne L_total_exit
+                                 CLOSURE_ENV rbx, rax
+                                 push rbx ;;push env 
+                                 push qword [rbp + 8 * 1] ; old ret addr
+                                 ;;fix the stack 
+                                 push rax ;;address of closure 
+                                 ;;rcx will hold old stack size 
+                                 mov rcx, [rbp+3*8] ;;n , rbp the old one 
+                                 add rcx, 4 ;; 4 - until first arg
+                                 shl rcx, 3 ;;old stack size
+                                 add rcx, 8 ;;for the magic  
+                                 ;;rdx will hold the size of new stack 
+                                 mov rdx, [rsp+3*8] ;;new n 
+                                 add rdx, 4 ;; 4 - until first arg
+                                 shl rdx, 3 ;;new stack size
+                                 add rdx, 8 ;;for the magic  
+                                 ;;rdi will hold the dest. dest = (old size- new size)*8 + rbp 
+                                 mov rdi, rcx 
+                                 sub rdi, rdx ;;rdi = rcx - rdx 
+                                 shl rdi, 3 
+                                 add rdi, rbp ;;address of dest 
+                                 ;;rsi will hold the source
+                                 mov rsi, rsp 
+                                 call memmove
+                                 mov rsp, rax ;;address of new stack 
+                                 pop rax ;;closure 
+                                 CLOSURE_CODE rbx, rax
+                                 jmp rbx "
+                               
+|_-> "";;
   
 end;;
 

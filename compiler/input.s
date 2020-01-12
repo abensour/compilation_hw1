@@ -17,7 +17,6 @@ MAKE_BOOL(1)
 MAKE_LITERAL_INT(1)
 MAKE_LITERAL_INT(2)
 MAKE_LITERAL_INT(3)
-MAKE_LITERAL_INT(4)
 
 ;;; These macro definitions are required for the primitive
 ;;; definitions in the epilogue to work properly
@@ -177,15 +176,13 @@ user_code_fragment:
 ;;; the primitive procedures are set up.
 
 push qword 12345678
-mov rax, const_tbl+33
-push rax
 mov rax, const_tbl+24
 push rax
 mov rax, const_tbl+15
 push rax
 mov rax, const_tbl+6
 push rax
-push 4
+push 3
 mov rbx, [rbp + 8*2] ;;rbx = address of env
   mov rcx, 0 ;;counter for size of env
 count_env_length0:
@@ -292,7 +289,43 @@ Lcode0:
   body_start0:
     push rbp
     mov rbp, rsp 
+push qword 12345678
 mov rax, qword [rbp + 8 * (4 + 1)]
+push rax
+mov rax, qword [rbp + 8 * (4 + 0)]
+push rax
+push 2
+mov rax, qword [fvar_tbl+200]
+cmp byte [rax], T_CLOSURE 
+
+                                 jne L_total_exit
+                                 CLOSURE_ENV rbx, rax
+                                 push rbx ;;push env 
+                                 push qword [rbp + 8 * 1] ; old ret addr
+                                 ;;fix the stack 
+                                 push rax ;;address of closure 
+                                 ;;rcx will hold old stack size 
+                                 mov rcx, [rbp+3*8] ;;n , rbp the old one 
+                                 add rcx, 4 ;; 4 - until first arg
+                                 shl rcx, 3 ;;old stack size
+                                 add rcx, 8 ;;for the magic  
+                                 ;;rdx will hold the size of new stack 
+                                 mov rdx, [rsp+3*8] ;;new n 
+                                 add rdx, 4 ;; 4 - until first arg
+                                 shl rdx, 3 ;;new stack size
+                                 add rdx, 8 ;;for the magic  
+                                 ;;rdi will hold the dest. dest = (old size- new size)*8 + rbp 
+                                 mov rdi, rcx 
+                                 sub rdi, rdx ;;rdi = rcx - rdx 
+                                 shl rdi, 3 
+                                 add rdi, rbp ;;address of dest 
+                                 ;;rsi will hold the source
+                                 mov rsi, rsp 
+                                 call memmove
+                                 mov rsp, rax ;;address of new stack 
+                                 pop rax ;;closure 
+                                 CLOSURE_CODE rbx, rax
+                                 jmp rbx 
 leave
     ret 
 Lcont0:

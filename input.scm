@@ -38,7 +38,13 @@
 ;;(define y '(#{a}=#t #{a}))
 ;;y
 ;;'#{x}=(1 . #{x})
-((lambda (a . c) c) 1 2 3 4)
+;;((lambda (x) ((lambda () ((lambda () x))))) 2)
 ;;((lambda (x) x) 1)
+;;(lambda () (if (eq? 1 1)
+;;		(+ 1 2)
+;;		(+ 3 4)))
 
+;;(lambda (x) x (lambda () (set! x 1)))
+;;((lambda () (if #t (+ 1 2) (+ 3 4))))
+((lambda (a . c) (cons a c)) 1 2 3)
 
