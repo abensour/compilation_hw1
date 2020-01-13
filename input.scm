@@ -45,6 +45,7 @@
 ;;		(+ 3 4)))
 
 ;;(lambda (x) x (lambda () (set! x 1)))
-;;((lambda () (if #t (+ 1 2) (+ 3 4))))
-((lambda (a . c) (cons a c)) 1 2 3)
+((lambda (a b c) (if #t (+ a b) (+ 3 4))) 1 2 3)
+;;((lambda () (+ 1 2)))
+;;1
 

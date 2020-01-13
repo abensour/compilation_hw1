@@ -416,7 +416,6 @@ let call_function_and_return =
                                  ;;rdi will hold the dest. dest = (old size- new size)*8 + rbp 
                                  mov rdi, rcx 
                                  sub rdi, rdx ;;rdi = rcx - rdx 
-                                 shl rdi, 3 
                                  add rdi, rbp ;;address of dest 
                                  ;;rsi will hold the source
                                  mov rsi, rsp 
