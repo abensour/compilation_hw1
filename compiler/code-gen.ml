@@ -230,20 +230,25 @@ let label_index = {index = 0};;
 
 let generate_lambda str_index= 
  "mov rbx, [rbp + 8*2] ;;rbx = address of env
-  mov rcx, 0 ;;counter for size of env
+  mov rcx, 1 ;;counter for size of env
+  cmp qword rbx, SOB_NIL_ADDRESS ;;just for the first env 
+  je end_count_env_length" ^ str_index ^"
 count_env_length" ^ str_index ^":
-    cmp qword rbx, SOB_NIL_ADDRESS
+    add rcx, 1
+    add rbx, 8 
+    cmp qword [rbx], SOB_NIL_ADDRESS
     je end_count_env_length" ^ str_index ^"
-    add rbx, 8
-    add rcx, 1 
     jmp count_env_length" ^ str_index ^"
 end_count_env_length" ^ str_index ^": 
     push rcx
     add rcx,1 ;;size of extent env 
     shl rcx, 3 ;;mul rcx*8
     MALLOC rax, rcx 
-    pop rcx ;;env size 
-    mov rbx, [rbp + 8*2] 
+    pop rcx ;;old env size 
+    mov rbx, [rbp + 8*2] ;;rbx = address of old env 
+    ;;extent first env
+    cmp rcx, 1
+    je extent_first_env" ^ str_index ^" 
 ;;rbx is oldenv adrees and rax is extenvadrees
     mov rsi, 0 ;;i
     mov rdi, 1 ;;j
@@ -256,6 +261,9 @@ copy_old_env" ^ str_index ^":
     inc rdi 
     jmp copy_old_env" ^ str_index ^"
 
+extent_first_env"^ str_index ^":
+    mov qword [rax+8], SOB_NIL_ADDRESS
+
 end_copy_old_env" ^ str_index ^":
     mov rdx, [rbp + 8*3]
     push rax
@@ -267,7 +275,7 @@ end_copy_old_env" ^ str_index ^":
     mov [rax], rbx  ;;put ExtEnv[0] address in ExtEnv Vector 
 ;;rbx is the pointer to the extenv[0] and rdx number of params 
     mov rcx,0
-compy_params" ^ str_index ^":
+copy_params" ^ str_index ^":
     cmp rcx, rdx 
     je end_copy_params" ^ str_index ^" 
     mov rsi, rcx 
@@ -278,7 +286,7 @@ compy_params" ^ str_index ^":
     mov rsi, [rsi]
     mov [rbx+rcx*8], rsi 
     inc rcx 
-    jmp compy_params" ^ str_index ^"
+    jmp copy_params" ^ str_index ^"
 end_copy_params" ^ str_index ^":
     mov rbx, rax 
     MAKE_CLOSURE(rax, rbx ,Lcode" ^ str_index ^") 
@@ -302,7 +310,7 @@ let genarate_opt_body generated_body str_index num_of_args=
     add rsi ,rsp ;;rsi is the top the stack befor magic 
     sub rcx, rdx ;;number of iteration
     cmp rcx, 0 ;;empty opt
-    je put_nil
+    je put_nil" ^ str_index^"\n
     mov rbx, qword [rsi]
     MAKE_PAIR(rax ,rbx ,SOB_NIL_ADDRESS)
     mov rdi, 1
@@ -339,7 +347,7 @@ let genarate_opt_body generated_body str_index num_of_args=
     call memmove 
     mov rsp, rax 
     jmp body_start" ^ str_index ^"
-  put_nil:
+  put_nil" ^ str_index^":
     add rsi, 8 ;; get to magic
     mov qword [rsi], SOB_NIL_ADDRESS
   body_start" ^ str_index ^":
@@ -367,12 +375,14 @@ let call_function_and_return =
   let rec generate consts fvars e = match e with
   | Const'(constant)->  "mov rax, " ^ (get_address_in_const_table constant consts)
   | Var'(VarParam(_,minor)) -> "mov rax, qword [rbp + 8 * (4 + " ^ string_of_int minor ^ ")]"
-  | Var'(VarBound(_,major,minor)) -> "mov rax, qword [rbp + 8∗2]\nmov rax, qword [rax + 8 ∗ " ^ (string_of_int major) ^"]\nmov rax, qword [rax + 8 ∗ " ^ (string_of_int minor) ^ "]"  
+  | Var'(VarBound(_,major,minor)) -> "mov rax, qword [rbp + 8*2]\nmov rax, qword [rax + 8*"^ (string_of_int major) ^ "] \nmov rax, qword [rax + 8*" ^(string_of_int minor) ^ "]"
   | Var'(VarFree(name)) -> "mov rax, qword [fvar_tbl+" ^  (string_of_int (List.assoc name fvars))^"]" 
+  | Box'(VarParam(var,minor)) -> (generate consts fvars (Var'(VarParam(var,minor)))) ^ "\nMALLOC rbx, 8\n" ^ "mov [rbx], rax\n" ^ "mov [rbp + 8 * (4 + " ^ string_of_int minor ^ ")], rbx"
   | BoxGet'(v)-> (generate consts fvars (Var'(v))) ^ "\n" ^ "mov rax, qword [rax]"
-  | BoxSet'(v, exp)-> let () = Printf.printf "here in box" in (generate consts fvars exp) ^ "\npush rax\n" ^ (generate consts fvars (Var'(v))) ^ "\npop qword [rax] \nmov rax, SOB_VOID_ADDRESS"
-  | If'(test, dit, dif) -> let str =  (generate consts fvars test) ^ "\n" ^ "cmp rax, SOB_FALSE_ADDRESS" ^ "\n" ^ "je Lelse" ^ (string_of_int label_index.index)^  "\n"
-  ^ (generate consts fvars dit) ^"\n" ^ "jmp Lexit" ^ (string_of_int label_index.index) ^ "\n" ^ "Lelse" ^ (string_of_int label_index.index) ^":\n" ^ (generate consts fvars dif) 
+  | BoxSet'(v, exp)->  (generate consts fvars exp) ^ "\npush rax\n" ^ (generate consts fvars (Var'(v))) ^ "\npop qword [rax] \nmov rax, SOB_VOID_ADDRESS"
+  | If'(test, dit, dif) -> let test = (generate consts fvars test) in let dit = (generate consts fvars dit) in let dif = (generate consts fvars dif) in
+  let str =  test ^ "\n" ^ "cmp rax, SOB_FALSE_ADDRESS" ^ "\n" ^ "je Lelse" ^ (string_of_int label_index.index)^  "\n"
+  ^ dit ^"\n" ^ "jmp Lexit" ^ (string_of_int label_index.index) ^ "\n" ^ "Lelse" ^ (string_of_int label_index.index) ^":\n" ^ dif
   ^ "\nLexit" ^(string_of_int label_index.index) ^ ":" in let () = label_index.index <- label_index.index + 1 in str 
   | Seq'(expr_list)-> List.fold_left (fun acc curr ->  acc ^ "\n" ^ (generate consts fvars curr)) "" expr_list 
   | Set'(Var'(VarParam(_, minor)), exp)-> (generate consts fvars exp) ^ "\n"^
