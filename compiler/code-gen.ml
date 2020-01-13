@@ -423,14 +423,18 @@ let call_function_and_return =
                                  add rdx, 4 ;; 4 - until first arg
                                  shl rdx, 3 ;;new stack size
                                  add rdx, 8 ;;for the magic  
+                                 add rdx, 8 ;;for rbp 
                                  ;;rdi will hold the dest. dest = (old size- new size)*8 + rbp 
                                  mov rdi, rcx 
                                  sub rdi, rdx ;;rdi = rcx - rdx 
                                  add rdi, rbp ;;address of dest 
+                                 mov rbp, [rbp]
+                                 push rbp ;;old rbp 
                                  ;;rsi will hold the source
                                  mov rsi, rsp 
                                  call memmove
                                  mov rsp, rax ;;address of new stack 
+                                 pop rbp ;;old rbp 
                                  pop rax ;;closure 
                                  CLOSURE_CODE rbx, rax
                                  jmp rbx "
@@ -438,4 +442,8 @@ let call_function_and_return =
 |_-> "";;
   
 end;;
+
+
+
+
 
