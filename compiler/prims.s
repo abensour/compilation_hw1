@@ -59,6 +59,7 @@ set_cdr:
 apply:
     push rbp 
     mov rbp, rsp 
+    push qword 12345678 ;;push magic 
 
     mov rsi, PVAR(0) ;;closure scheme object 
     mov rdi, PVAR(1) ;;pair of args  
@@ -96,14 +97,16 @@ apply:
 
 .call_function:
     push rcx ;;number of args 
-    push qword [rbp + 8*2] ;;env 
-    mov rsi, qword [rsi+ TYPE_SIZE + WORD_SIZE] ;;rsi <- code of function 
-    call rsi ;;call function - code 
+    CLOSURE_ENV rbx, rsi ;;env of closure
+   push rbx 
+   CLOSURE_CODE rbx, rsi ;;code 
+   call rbx
     ;;ret from function 
     add rsp, 8 ;;pop env
     pop rbx ;;pop num of args 
     shl rbx, 3 ;;mul rbx*8 
     add rsp, rbx 
+    add rsp,8 ;;for magic 
     leave
     ret 
     

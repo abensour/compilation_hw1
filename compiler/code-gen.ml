@@ -380,9 +380,9 @@ let call_function_and_return =
   | Box'(VarParam(var,minor)) -> (generate consts fvars (Var'(VarParam(var,minor)))) ^ "\nMALLOC rbx, 8\n" ^ "mov [rbx], rax\n" ^ "mov [rbp + 8 * (4 + " ^ string_of_int minor ^ ")], rbx"
   | BoxGet'(v)-> (generate consts fvars (Var'(v))) ^ "\n" ^ "mov rax, qword [rax]"
   | BoxSet'(v, exp)->  (generate consts fvars exp) ^ "\npush rax\n" ^ (generate consts fvars (Var'(v))) ^ "\npop qword [rax] \nmov rax, SOB_VOID_ADDRESS"
-  | If'(test, dit, dif) -> let test = (generate consts fvars test) in let dit = (generate consts fvars dit) in let dif = (generate consts fvars dif) in
+  | If'(test, dit, dif) -> let test = (generate consts fvars test) in let dit_s = (generate consts fvars dit) in let dif_s = (generate consts fvars dif) in
   let str =  test ^ "\n" ^ "cmp rax, SOB_FALSE_ADDRESS" ^ "\n" ^ "je Lelse" ^ (string_of_int label_index.index)^  "\n"
-  ^ dit ^"\n" ^ "jmp Lexit" ^ (string_of_int label_index.index) ^ "\n" ^ "Lelse" ^ (string_of_int label_index.index) ^":\n" ^ dif
+  ^ dit_s ^"\n" ^ "jmp Lexit" ^ (string_of_int label_index.index) ^ "\n" ^ "Lelse" ^ (string_of_int label_index.index) ^":\n" ^ dif_s
   ^ "\nLexit" ^(string_of_int label_index.index) ^ ":" in let () = label_index.index <- label_index.index + 1 in str 
   | Seq'(expr_list)-> List.fold_left (fun acc curr ->  acc ^ "\n" ^ (generate consts fvars curr)) "" expr_list 
   | Set'(Var'(VarParam(_, minor)), exp)-> (generate consts fvars exp) ^ "\n"^
