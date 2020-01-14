@@ -213,8 +213,8 @@ let box_set e = box_set_rec e;;
 
 let run_semantics expr =
   box_set
-    (annotate_tail_calls
-       (annotate_lexical_addresses expr));;
+  
+       (annotate_lexical_addresses expr);;
   
 end;; (* struct Semantics *)
 

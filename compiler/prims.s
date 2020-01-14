@@ -62,7 +62,9 @@ apply:
     push qword 12345678 ;;push magic 
 
     mov rsi, PVAR(0) ;;closure scheme object 
-    mov rdi, PVAR(1) ;;pair of args  
+    mov rdx, [rbp + 8*3] ;;get number of args
+    dec rdx  
+    mov rdi, PVAR(rdx) ;;get last arg = pair of args  
     mov rcx, 0 
 .push_args_from_0_to_n:
     cmp rdi, SOB_NIL_ADDRESS
@@ -89,11 +91,32 @@ apply:
     add rax, rsp ;; points to previous stack that was arrange with args0 to argn 
 .override:
     cmp rbx, rcx ;;rbx = number of args 
-    je .call_function
+    je .push_regular_args
     pop rdx ;;arg 0 
     mov [rax + rbx*8], rdx 
     inc rbx 
     jmp .override 
+
+.push_regular_args:
+    mov rdx, [rbp + 8*3] ;;get number of args
+    sub rdx, 2  ;;number of regular args 
+
+    add rcx, rdx ;;number of all args 
+
+    mov rbx, 0 
+    mov rax, rdx ;;number of regular args 
+    inc rax ;;for the first argument- the function 
+    add rax, 3 ;;for ret, env, n 
+    shl rax, 3 ;;mul rax*8 
+    add rax, rbp 
+    ;;rax is the address of the first regular arg after the list 
+.start_push_regular: 
+    cmp rbx, rdx 
+    je .call_function 
+    push qword [rax]
+    sub rax, 8 ;;for the lower arg 
+    inc rbx
+    jmp .start_push_regular
 
 .call_function:
     push rcx ;;number of args 
