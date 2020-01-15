@@ -4,9 +4,12 @@ car:
 
     mov rsi, PVAR(0)
     cmp byte [rsi], T_PAIR 
-    jne .return  ;;what to do if it is not a pair 
-    mov rax, [rsi + TYPE_SIZE]
+    jne .bad_return  ;;what to do if it is not a pair 
+    mov rax, qword [rsi + TYPE_SIZE]
 .return:
+    leave
+    ret 
+.bad_return:
     leave
     ret 
 
@@ -16,11 +19,14 @@ cdr:
 
     mov rsi, PVAR(0)
     cmp byte [rsi], T_PAIR 
-    jne .return  ;;what to do if it is not a pair 
-    mov rax, [rsi + TYPE_SIZE+ WORD_SIZE]
+    jne .bad_return  ;;what to do if it is not a pair 
+    mov rax, qword [rsi + TYPE_SIZE+ WORD_SIZE]
 .return:
     leave
     ret
+.bad_return:
+    leave
+    ret 
 
 cons:
     push rbp

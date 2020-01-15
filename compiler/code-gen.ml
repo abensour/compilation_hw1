@@ -85,7 +85,7 @@ module Code_Gen = struct
   |Sexpr(Bool true) -> ( (const, (offset, "MAKE_BOOL(1)")), 2)
   |Sexpr(Number(Int(num))) -> ( (const, (offset, "MAKE_LITERAL_INT(" ^ (string_of_int num) ^")")), 9)
   |Sexpr(Number(Float(num))) -> ( (const, (offset, "MAKE_LITERAL_FLOAT(" ^ (string_of_float num) ^")")), 9)
-  |Sexpr(Char(c)) -> ( (const, (offset, "MAKE_LITERAL_CHAR("^ (Char.escaped c) ^")")), 2)
+  |Sexpr(Char(c)) -> ( (const, (offset, "MAKE_LITERAL_CHAR("^ (string_of_int (Char.code c)) ^")")), 2)
   |Sexpr(String(str)) -> ( (const, (offset, "MAKE_LITERAL_STRING \""^ str ^"\"")), (String.length str) + 9) (*to check!*)
   |Sexpr(Symbol(str)) -> ( (const, (offset, " MAKE_LITERAL_SYMBOL(const_tbl+ "^ (string_of_int (get_const_address table (Sexpr(String(str))))) ^")")), 9)
   |Sexpr(Pair(sexpr1, sexpr2)) -> ( (const, (offset, " MAKE_LITERAL_PAIR(const_tbl+ "^ (string_of_int (get_const_address table (Sexpr(sexpr1)))) ^"
@@ -100,7 +100,7 @@ module Code_Gen = struct
   |Sexpr(Bool true) -> ( (const, (offset, "MAKE_BOOL(1)")), 2)
   |Sexpr(Number(Int(num))) -> ( (const, (offset, "MAKE_LITERAL_INT(" ^ (string_of_int num) ^")")), 9)
   |Sexpr(Number(Float(num))) -> ( (const, (offset, "MAKE_LITERAL_FLOAT(" ^ (string_of_float num) ^")")), 9)
-  |Sexpr(Char(c)) -> ( (const, (offset, "MAKE_LITERAL_CHAR('"^ (Char.escaped c) ^"')")), 2)
+  |Sexpr(Char(c)) -> ( (const, (offset, "MAKE_LITERAL_CHAR("^ (string_of_int (Char.code c)) ^")")), 2)
   |Sexpr(String(str)) -> ( (const, (offset, "MAKE_LITERAL_STRING \""^ str ^"\"")), (String.length str) + 9) (*to check!*)
   |Sexpr(Symbol(str)) -> ( (const, (offset, "MAKE_LITERAL_SYMBOL(const_tbl+ "^ (string_of_int (get_const_address_iter_2 table (Sexpr(String(str))))) ^")")), 9)
   |Sexpr(Pair(sexpr1, sexpr2)) ->  ( (const, (offset, " MAKE_LITERAL_PAIR(const_tbl+ "^ (string_of_int (get_const_address_iter_2 table (Sexpr(sexpr1)))) ^", const_tbl+" ^ (string_of_int (get_const_address_iter_2 table (Sexpr(sexpr2)))) ^")")), 17)
@@ -180,11 +180,6 @@ let ast_without_tagggedSexpr asts = List.fold_left (fun accList curr -> accList 
   let reduced = reduce_list extended_list in
   let table_1 = build_consts_table reduced in build_consts_table_iter_2 table_1;; 
 
-  let check s= 
-  let str = List.map Semantics.run_semantics
-                         (Tag_Parser.tag_parse_expressions
-                            (Reader.read_sexprs s)) in
-                             str;;
 
 let exists_str curr_const consts_list = 
   List.fold_left (fun acc curr -> if (curr = curr_const) then true else acc) false consts_list;;
@@ -374,12 +369,19 @@ let call_function_and_return =
 
   let rec generate consts fvars e = match e with
   | Const'(constant)->  "mov rax, " ^ (get_address_in_const_table constant consts)
+
   | Var'(VarParam(_,minor)) -> "mov rax, qword [rbp + 8 * (4 + " ^ string_of_int minor ^ ")]"
+
   | Var'(VarBound(_,major,minor)) -> "mov rax, qword [rbp + 8*2]\nmov rax, qword [rax + 8*"^ (string_of_int major) ^ "] \nmov rax, qword [rax + 8*" ^(string_of_int minor) ^ "]"
+
   | Var'(VarFree(name)) -> "mov rax, qword [fvar_tbl+" ^  (string_of_int (List.assoc name fvars))^"]" 
-  | Box'(VarParam(var,minor)) -> (generate consts fvars (Var'(VarParam(var,minor)))) ^ "\nMALLOC rbx, 8\n" ^ "mov [rbx], rax\n" ^ "mov [rbp + 8 * (4 + " ^ string_of_int minor ^ ")], rbx"
+
+  | Box'(VarParam(var,minor)) -> (generate consts fvars (Var'(VarParam(var,minor)))) ^ "\nMALLOC rbx, 8\n" ^ "mov [rbx], rax\n" ^ "mov rax, rbx"
   | BoxGet'(v)-> (generate consts fvars (Var'(v))) ^ "\n" ^ "mov rax, qword [rax]"
+  
   | BoxSet'(v, exp)->  (generate consts fvars exp) ^ "\npush rax\n" ^ (generate consts fvars (Var'(v))) ^ "\npop qword [rax] \nmov rax, SOB_VOID_ADDRESS"
+  
+  
   | If'(test, dit, dif) -> let test = (generate consts fvars test) in let dit_s = (generate consts fvars dit) in let dif_s = (generate consts fvars dif) in
   let str =  test ^ "\n" ^ "cmp rax, SOB_FALSE_ADDRESS" ^ "\n" ^ "je Lelse" ^ (string_of_int label_index.index)^  "\n"
   ^ dit_s ^"\n" ^ "jmp Lexit" ^ (string_of_int label_index.index) ^ "\n" ^ "Lelse" ^ (string_of_int label_index.index) ^":\n" ^ dif_s
@@ -391,16 +393,22 @@ let call_function_and_return =
   |Set'(Var'(VarBound(_,major,minor)), exp) -> (generate consts fvars exp) ^ "\n"^ "mov rbx, qword [rbp + 8*2]" ^ "\n" ^ "mov rbx, qword [rbp + 8*" ^ (string_of_int major) ^ "]" ^ "\n" ^
   "mov qword [rbx + 8*" ^ (string_of_int minor) ^ "], rax"^  "\n"^ "mov rax, SOB_VOID_ADDRESS"
   |Set'(Var'(VarFree(v)), exp) -> (generate consts fvars exp) ^ "\n"^ "mov qword [fvar_tbl+" ^ string_of_int (List.assoc v fvars) ^"], rax" ^"\n" ^ "mov rax, SOB_VOID_ADDRESS"
+  
   |Def'(Var'(VarFree(v)), exp)-> (generate consts fvars exp) ^ "\n"^ "mov qword [fvar_tbl+" ^ string_of_int (List.assoc v fvars) ^"], rax" ^"\n" ^ "mov rax, SOB_VOID_ADDRESS"
+  
   | Or'(expr_list)-> let all_expr = List.map (generate consts fvars) expr_list in  let all_orrs = List.fold_left (fun accList curr_str -> accList ^ curr_str ^ "\ncmp rax, SOB_FALSE_ADDRESS \njne Lexit" ^ (string_of_int label_index.index) ^"\n") "" all_expr 
   in let fin_str = all_orrs ^ "\nLexit" ^(string_of_int label_index.index) ^ ":" in let () = label_index.index <- label_index.index + 1 in fin_str 
+  
   | LambdaSimple'(params, expr)-> let generated_body = (generate consts fvars expr) in let lambda_code = generate_lambda (string_of_int label_index.index) in let fin_str = lambda_code ^ (genarate_simple_body generated_body (string_of_int label_index.index))
   in let () = label_index.index <- label_index.index + 1 in fin_str
+  
   | LambdaOpt'(params, optional, expr)-> let generated_body = (generate consts fvars expr) in let lambda_code = generate_lambda (string_of_int label_index.index) in let fin_str =  lambda_code ^ (genarate_opt_body generated_body (string_of_int label_index.index) (string_of_int (List.length params)))
    in let () = label_index.index <- label_index.index + 1 in fin_str
+  
   | Applic'(closure, args)->  let push_args_string = List.fold_right (fun curr acc -> acc ^ (generate consts fvars curr)^ "\n"^"push rax\n") args "" in
                                let n = "push " ^(string_of_int (List.length args))^"\n" in 
                                magic ^ push_args_string ^ n ^ (generate consts fvars closure) ^"\n"^ call_function_and_return
+                             
 
 
   | ApplicTP'(closure, args)-> let push_args_string = List.fold_right (fun curr acc -> acc ^ (generate consts fvars curr)^ "\n"^"push rax\n") args "" in
@@ -440,6 +448,11 @@ let call_function_and_return =
                                  jmp rbx "
                                
 |_-> "";;
+
+  let check s= 
+  let asts = List.map Semantics.run_semantics
+                         (Tag_Parser.tag_parse_expressions
+                            (Reader.read_sexprs s)) in make_consts_tbl asts                    ;;
   
 end;;
 
