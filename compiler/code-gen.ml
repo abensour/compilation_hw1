@@ -262,6 +262,7 @@ extent_first_env"^ str_index ^":
 end_copy_old_env" ^ str_index ^":
     mov rdx, [rbp + 8*3]
     push rax
+    inc rdx ;;add 1 to number of args including the magic 
     push rdx 
     shl rdx, 3 ;;mul rdx*8
     MALLOC rbx, rdx ;;rbx is address of ExtEnv[0]
@@ -283,6 +284,7 @@ copy_params" ^ str_index ^":
     inc rcx 
     jmp copy_params" ^ str_index ^"
 end_copy_params" ^ str_index ^":
+    ;;rcx 
     mov rbx, rax 
     MAKE_CLOSURE(rax, rbx ,Lcode" ^ str_index ^") 
     jmp Lcont" ^ str_index ;;
@@ -365,7 +367,7 @@ let call_function_and_return =
    pop rbx ;;rbx = number of args
    shl rbx, 3 ;; rbx = rbx*8
    add rsp, rbx ;;pop args
-   add rsp, 8 ;;pop magic";;
+   add rsp, 8 ;; pop magic";;
 
   let rec generate consts fvars e = match e with
   | Const'(constant)->  "mov rax, " ^ (get_address_in_const_table constant consts)
@@ -390,7 +392,7 @@ let call_function_and_return =
   | Set'(Var'(VarParam(_, minor)), exp)-> (generate consts fvars exp) ^ "\n"^
   "mov qword [rbp + 8*(4+ " ^ (string_of_int minor) ^ ")], rax" ^"\n"^ 
   "mov rax, SOB_VOID_ADDRESS"
-  |Set'(Var'(VarBound(_,major,minor)), exp) -> (generate consts fvars exp) ^ "\n"^ "mov rbx, qword [rbp + 8*2]" ^ "\n" ^ "mov rbx, qword [rbp + 8*" ^ (string_of_int major) ^ "]" ^ "\n" ^
+  |Set'(Var'(VarBound(_,major,minor)), exp) -> (generate consts fvars exp) ^ "\n"^ "mov rbx, qword [rbp + 8*2]" ^ "\n" ^ "mov rbx, qword [rbx + 8*" ^ (string_of_int major) ^ "]" ^ "\n" ^
   "mov qword [rbx + 8*" ^ (string_of_int minor) ^ "], rax"^  "\n"^ "mov rax, SOB_VOID_ADDRESS"
   |Set'(Var'(VarFree(v)), exp) -> (generate consts fvars exp) ^ "\n"^ "mov qword [fvar_tbl+" ^ string_of_int (List.assoc v fvars) ^"], rax" ^"\n" ^ "mov rax, SOB_VOID_ADDRESS"
   
@@ -407,9 +409,7 @@ let call_function_and_return =
   
   | Applic'(closure, args)->  let push_args_string = List.fold_right (fun curr acc -> acc ^ (generate consts fvars curr)^ "\n"^"push rax\n") args "" in
                                let n = "push " ^(string_of_int (List.length args))^"\n" in 
-                               magic ^ push_args_string ^ n ^ (generate consts fvars closure) ^"\n"^ call_function_and_return
-                             
-
+                               magic ^ push_args_string ^ n ^ (generate consts fvars closure) ^"\n"^ call_function_and_return                          
 
   | ApplicTP'(closure, args)-> let push_args_string = List.fold_right (fun curr acc -> acc ^ (generate consts fvars curr)^ "\n"^"push rax\n") args "" in
                                let n = "push " ^(string_of_int (List.length args))^"\n" in 
@@ -448,12 +448,6 @@ let call_function_and_return =
                                  jmp rbx "
                                
 |_-> "";;
-
-  let check s= 
-  let asts = List.map Semantics.run_semantics
-                         (Tag_Parser.tag_parse_expressions
-                            (Reader.read_sexprs s)) in make_consts_tbl asts                    ;;
-  
 end;;
 
 
